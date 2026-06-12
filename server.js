@@ -7,6 +7,7 @@ const authRoutes = require('./src/routes/authRoutes');
 const passport = require('passport');
 require('./src/config/passport');
 const resumeRoutes = require('./src/routes/resumeRoutes');
+const parseRoutes = require('./src/routes/parseRoutes');
 
 
 
@@ -21,6 +22,7 @@ app.use(passport.initialize());
 // Test route
 app.use('/api/auth', authRoutes);
 app.use('/api/resumes', resumeRoutes);
+app.use('/api/parse', parseRoutes);
 app.get('/', (req, res) => {
   res.json({ message: "Server running" });
 });

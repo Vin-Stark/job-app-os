@@ -5,6 +5,8 @@ const aws = require('../config/s3');
 const multer = require('multer');
 const verifyToken = require('../middleware/authMiddleware');
 const { PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const pdfParse = require('pdf-parse');
+console.log(pdfParse);
 
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -26,10 +28,14 @@ router.post('/upload', verifyToken, upload.single('resume'), async (req, res) =>
 
         await aws.send(command);
         const s3Url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
-        await pool.query('INSERT INTO resumes (user_id, s3_key, filename, s3_url, file_size) VALUES($1, $2, $3, $4, $5)', [req.user.user.id, s3Key, file.originalname, s3Url, file.size]);
-        res.status(201).json({ success: true, message: "Resume uploaded successfully", url: s3Url });
+        const resumeResult = await pool.query('INSERT INTO resumes (user_id, s3_key, filename, s3_url, file_size) VALUES($1, $2, $3, $4, $5) RETURNING id', [req.user.user.id, s3Key, file.originalname, s3Url, file.size]);
+        const resumeId = resumeResult.rows[0].id;
+        const pdfData = await pdfParse(Buffer.from(file.buffer));
+        const rawText = pdfData.text
+        await pool.query('INSERT INTO resume_parsed_data (user_id, resume_id, raw_text) VALUES($1, $2, $3)', [req.user.user.id, resumeId, rawText]);
+        res.status(201).json({ success: true, message: "Resume uploaded and text extracted successfully", resumeId, url: s3Url });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err.message, message: "ResumeRoutes" });
     }
 });
 
