@@ -8,6 +8,8 @@ const passport = require('passport');
 require('./src/config/passport');
 const resumeRoutes = require('./src/routes/resumeRoutes');
 const parseRoutes = require('./src/routes/parseRoutes');
+const jobRoutes = require('./src/routes/jobRoutes');
+const matchRoutes = require('./src/routes/matchRoutes');
 
 
 
@@ -23,6 +25,10 @@ app.use(passport.initialize());
 app.use('/api/auth', authRoutes);
 app.use('/api/resumes', resumeRoutes);
 app.use('/api/parse', parseRoutes);
+app.use('/api/jobs', jobRoutes);
+app.use('/api/match', matchRoutes);
+
+
 app.get('/', (req, res) => {
   res.json({ message: "Server running" });
 });
