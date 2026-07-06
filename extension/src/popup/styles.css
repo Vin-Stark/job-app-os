@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Side panel width is user-resizable — fill it, but keep the content column
+   from stretching too wide on a dragged-out panel. */
+html, body, #root {
+  margin: 0;
+  min-width: 320px;
+  background: #0b0f19;
+  color: #e5e7eb;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+#root {
+  max-width: 460px;
+  margin: 0 auto;
+}

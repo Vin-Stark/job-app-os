@@ -1,2 +1,39 @@
-node_modules
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment variables (never commit secrets)
 .env
+.env.local
+.env.*.local
+
+# Extension private key — used to sign the extension; must stay secret
+extension/key.pem
+
+# Extension build output
+extension/dist/
+extension/tsconfig.tsbuildinfo
+
+# Frontend build output
+frontend/dist/
+frontend/.vite/
+
+# Backend logs / temp
+backend/logs/
+*.log
+
+# Claude Code settings (may contain local DB passwords and shell permissions)
+.claude/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -1,0 +1,5 @@
+node_modules
+dist
+# Private signing key + derived key material — never commit these
+key.pem
+.manifest-key.txt
