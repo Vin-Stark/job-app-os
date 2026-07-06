@@ -6,18 +6,40 @@ const multer = require('multer');
 const verifyToken = require('../middleware/authMiddleware');
 const { PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const pdfParse = require('pdf-parse');
-console.log(pdfParse);
 
+const MAX_RESUME_BYTES = 5 * 1024 * 1024; // 5MB — resumes are 1-2 pages
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_RESUME_BYTES },
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'application/pdf') return cb(null, true);
+        cb(new Error('Only PDF files are accepted'));
+    },
+});
 
-router.post('/upload', verifyToken, upload.single('resume'), async (req, res) => {
+// Wrap multer so its errors (size/type) return clean JSON instead of a 500
+const uploadResume = (req, res, next) => {
+    upload.single('resume')(req, res, (err) => {
+        if (err) {
+            const msg = err.code === 'LIMIT_FILE_SIZE'
+                ? 'File too large — maximum 5MB'
+                : err.message;
+            return res.status(400).json({ error: msg, message: 'ResumeRoutes' });
+        }
+        next();
+    });
+};
+
+router.post('/upload', verifyToken, uploadResume, async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ error: 'No file uploaded' });
         }
         const file = req.file;
-        const s3Key = `resumes/${req.user.user.id}-${Date.now()}-${file.originalname}`;
+        // Sanitize the client-supplied filename before it touches the S3 key
+        const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100);
+        const s3Key = `resumes/${req.user.user.id}-${Date.now()}-${safeName}`;
 
         const command = new PutObjectCommand({
             Bucket: process.env.AWS_BUCKET_NAME,
@@ -41,7 +63,7 @@ router.post('/upload', verifyToken, upload.single('resume'), async (req, res) =>
 
 router.get("/list", verifyToken, async (req, res) => {
     try {
-        const result = await pool.query("SELECT id, filename, s3_url, created_at FROM resumes WHERE user_id = $1", [req.user.user.id]);
+        const result = await pool.query("SELECT id, filename, s3_url, file_size, created_at FROM resumes WHERE user_id = $1", [req.user.user.id]);
         res.json({ success: true, resumes: result.rows });
     } catch (err) {
         res.status(500).json({ error: err.message });

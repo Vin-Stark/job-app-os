@@ -63,13 +63,6 @@ router.post('/analyze', verifyToken, async (req, res) => {
         );
 
         const work_authorization_status = visa_status.rows[0].work_authorization_status;
-        console.log({
-    blocksOPT: blocksOPTCPT(raw_text),
-    requiresPermanent: requiresPermanentAuth(raw_text),
-    supports: supportsSponsorship(raw_text),
-    userStatus: work_authorization_status
-});
-
         if (work_authorization_status !== 'permanent') {
             // If the JD explicitly supports sponsorship, let them through regardless
             if (!supportsSponsorship(raw_text)) {
@@ -89,10 +82,13 @@ router.post('/analyze', verifyToken, async (req, res) => {
 
         {
             "location": "",
+            "salary": "",
             "experience_needed": "",
             "preferred_qualifications": [],
             "must_have_qualifications": []
         }
+
+        For salary: extract the full salary range/amount as a string (e.g. "$120k-$160k", "$180,000/yr"). If no salary is mentioned, return "Not specified".
 
         Job description:
         ${raw_text}`;
@@ -107,14 +103,15 @@ router.post('/analyze', verifyToken, async (req, res) => {
                 const parsedData = JSON.parse(responseText);
 
                 await pool.query(
-                    `INSERT INTO job_descriptions (user_id, job_title, company_name, raw_text, location, experience_needed, preferred_qualifications, must_have_qualifications)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                    `INSERT INTO job_descriptions (user_id, job_title, company_name, raw_text, location, salary, experience_needed, preferred_qualifications, must_have_qualifications)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
                     [
                         req.user.user.id,
                         job_title,
                         company_name,
                         raw_text,
                         parsedData.location,
+                        parsedData.salary || 'Not specified',
                         parsedData.experience_needed,
                         JSON.stringify(parsedData.preferred_qualifications),
                         JSON.stringify(parsedData.must_have_qualifications)
