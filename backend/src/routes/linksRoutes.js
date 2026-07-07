@@ -60,7 +60,8 @@ router.get('/:resumeId', verifyToken, async (req, res) => {
             projects: allProjects,
         });
     } catch (err) {
-        res.status(500).json({ error: err.message, message: 'linksRoutes' });
+        console.error(err);
+        res.status(500).json({ error: 'Failed to load links.', message: 'linksRoutes' });
     }
 });
 
@@ -113,7 +114,8 @@ DO UPDATE SET
 
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: err.message, message: 'linksRoutes' });
+        console.error(err);
+        res.status(500).json({ error: 'Failed to save links.', message: 'linksRoutes' });
     }
 });
 

@@ -1,14 +1,10 @@
 const express = require('express');
 const pool = require('../config/db');
-const pdfParse = require('pdf-parse');
 const verifyToken = require('../middleware/authMiddleware');
-const { GetObjectCommand } = require('@aws-sdk/client-s3');
-const Anthropic = require('@anthropic-ai/sdk');
-const aws = require('../config/s3');
+const { MODELS, callClaude, respondError } = require('../services/claude');
+const { RESUME_PARSE_SCHEMA, buildResumeParsePrompt } = require('../services/prompts');
 const router = express.Router();
 
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const { aiLimiter } = require('../middleware/rateLimiters');
 
 
@@ -26,34 +22,13 @@ router.post('/parse/:resumeId', verifyToken, aiLimiter, async (req, res) => {
             res.json({ success: true, data: parsedResume });
         }
         else {
-
-            const prompt = `You are a resume parser. Extract the following information from this resume text and return it as valid JSON only, no other text:
-
-        {
-            "name": "full name",
-            "email": "email address",
-            "phone": "phone number",
-            "summary": "professional summary or objective",
-            "skills": ["skill1", "skill2"],
-            "experience": [{"company": "", "title": "", "duration": "", "description": ""}],
-            "education": [{"institution": "", "degree": "", "year": ""}],
-            "projects": [{"name": "", "description": "", "technologies": "", "github_url": "GitHub repo URL for this project if present, else null", "live_url": "Live demo or deployment URL for this project if present, else null"}],
-            "github_url": "GitHub profile URL (github.com/username) if present in resume, else null",
-            "linkedin_url": "LinkedIn profile URL (linkedin.com/in/...) if present in resume, else null",
-            "portfolio_url": "Personal website or portfolio URL (NOT GitHub, NOT LinkedIn) if present in resume, else null"
-        }
-
-        Resume text:
-        ${raw_text}`;
-
-
-            const message = await anthropic.messages.create({
-                model: 'claude-haiku-4-5-20251001',
-                max_tokens: 1500,
-                messages: [{ role: 'user', content: prompt }]
+            const parsedData = await callClaude({
+                label: 'resume-parse',
+                model: MODELS.EXTRACTION,
+                maxTokens: 2500,
+                prompt: buildResumeParsePrompt(raw_text),
+                schema: RESUME_PARSE_SCHEMA,
             });
-            const responseText = message.content[0].text.replace(/```json\n?|\n?```/g, '').trim();
-            const parsedData = JSON.parse(responseText);
             await pool.query(
                 `UPDATE resume_parsed_data
 SET name=$1, email=$2, phone=$3, summary=$4, skills=$5, experience=$6, education=$7, projects=$8,
@@ -110,7 +85,7 @@ ON CONFLICT (resume_id, project_name) DO NOTHING`,
         }
 
     } catch (err) {
-        res.status(500).json({ error: err.message, message: 'parseRoutes' });
+        respondError(res, err, 'parseRoutes', 'Resume parsing failed. Please try again.');
     }
 });
 
@@ -130,7 +105,7 @@ router.get('/summary/:resumeId', verifyToken, async (req, res) => {
         const row = result.rows[0];
         res.json({ parsed: true, name: row.name, summary: row.summary, skills: row.skills });
     } catch (err) {
-        res.status(500).json({ error: err.message, message: 'parseRoutes' });
+        respondError(res, err, 'parseRoutes', 'Failed to load resume summary.');
     }
 });
 

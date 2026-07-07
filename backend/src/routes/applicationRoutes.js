@@ -31,7 +31,8 @@ router.post('/', verifyToken, async (req, res) => {
         );
         res.json({ success: true, data: application.rows[0] });
     } catch (err) {
-        res.status(500).json({ error: err.message, message: 'applicationRoutes post' });
+        console.error(err);
+        res.status(500).json({ error: 'Failed to save application.', message: 'applicationRoutes post' });
     }
 });
 
@@ -50,7 +51,8 @@ router.get('/', verifyToken, async (req, res) => {
         );
         res.json({ success: true, data: result.rows });
     } catch (error) {
-        res.status(500).json({ error: error.message, message: 'applicationRoutes get' });
+        console.error(error);
+        res.status(500).json({ error: 'Failed to load applications.', message: 'applicationRoutes get' });
     }
 });
 
@@ -85,7 +87,8 @@ router.patch('/:id', verifyToken, async (req, res) => {
 
         res.json({ success: true, data: application.rows[0] });
     } catch (error) {
-        res.status(500).json({ error: error.message, message: 'applicationRoutes patch' });
+        console.error(error);
+        res.status(500).json({ error: 'Failed to update application.', message: 'applicationRoutes patch' });
     }
 });
 
@@ -100,7 +103,8 @@ router.delete('/:id', verifyToken, async (req, res) => {
         }
         res.json({ success: true, data: application.rows[0] });
     } catch (error) {
-        res.status(500).json({ error: error.message, message: 'applicationRoutes delete' });
+        console.error(error);
+        res.status(500).json({ error: 'Failed to delete application.', message: 'applicationRoutes delete' });
     }
 });
 

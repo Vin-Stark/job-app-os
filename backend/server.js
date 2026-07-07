@@ -41,10 +41,10 @@ app.use(passport.initialize());
 app.use(apiLimiter);
 
 // Routes
-// NOTE: legacy jobRoutes (/api/jobs) and matchRoutes (/api/match) are
-// intentionally NOT mounted — they were superseded by generateRoutes
-// /analyze + /finalize (deterministic ATS scoring). Mounting them again
-// would reopen the LLM-scored ATS path. Files kept for reference only.
+// NOTE: legacy jobRoutes (/api/jobs) and matchRoutes (/api/match) were
+// deleted (July 2026) — superseded by generateRoutes /analyze + /finalize
+// (deterministic ATS scoring). Recover from git history only; matchRoutes
+// contained an LLM-scored ATS path that violates locked decision #2.
 app.use('/api/auth', authRoutes);
 app.use('/api/resumes', resumeRoutes);
 app.use('/api/parse', parseRoutes);

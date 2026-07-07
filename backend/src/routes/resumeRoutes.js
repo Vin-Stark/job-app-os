@@ -55,18 +55,20 @@ router.post('/upload', verifyToken, uploadResume, async (req, res) => {
         const pdfData = await pdfParse(Buffer.from(file.buffer));
         const rawText = pdfData.text
         await pool.query('INSERT INTO resume_parsed_data (user_id, resume_id, raw_text) VALUES($1, $2, $3)', [req.user.user.id, resumeId, rawText]);
-        res.status(201).json({ success: true, message: "Resume uploaded and text extracted successfully", resumeId, url: s3Url });
+        res.status(201).json({ success: true, message: "Resume uploaded and text extracted successfully", resumeId });
     } catch (err) {
-        res.status(500).json({ error: err.message, message: "ResumeRoutes" });
+        console.error(err);
+        res.status(500).json({ error: 'Resume upload failed. Please try again.', message: "ResumeRoutes" });
     }
 });
 
 router.get("/list", verifyToken, async (req, res) => {
     try {
-        const result = await pool.query("SELECT id, filename, s3_url, file_size, created_at FROM resumes WHERE user_id = $1", [req.user.user.id]);
+        const result = await pool.query("SELECT id, filename, file_size, created_at FROM resumes WHERE user_id = $1", [req.user.user.id]);
         res.json({ success: true, resumes: result.rows });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Failed to load resumes.', message: "ResumeRoutes" });
     }
 });
 
@@ -86,7 +88,8 @@ router.delete("/delete/:id", verifyToken, async (req, res) => {
         await pool.query("DELETE FROM resumes WHERE id = $1 AND user_id = $2", [id, user_id]);
         res.json({ success: true, message: "Resume deleted successfully" });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Failed to delete resume.', message: "ResumeRoutes" });
     }
 });
 

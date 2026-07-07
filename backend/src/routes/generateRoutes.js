@@ -3,8 +3,18 @@ const router = express.Router();
 const pool = require('../config/db');
 const verifyToken = require('../middleware/authMiddleware');
 const { aiLimiter, apiLimiter } = require('../middleware/rateLimiters');
-const Anthropic = require('@anthropic-ai/sdk');
-const { parseClaudeJson } = require('../utils/parseClaudeJson');
+const { MODELS, callClaude, respondError, UserFacingError } = require('../services/claude');
+const {
+    RESUME_PARSE_SCHEMA, buildResumeParsePrompt,
+    JD_PARSE_SCHEMA, buildJdParsePrompt,
+    KEYWORDS_SCHEMA, buildKeywordsPrompt,
+    ELIGIBILITY_SCHEMA, buildEligibilityPrompt,
+    EVIDENCE_SCHEMA, buildEvidenceMiningPrompt,
+    MATCH_SCHEMA, buildMatchPrompt,
+    EXTRACT_JOB_SCHEMA, buildExtractJobPrompt,
+    TECH_EXTRACTION_SCHEMA, buildTechExtractionPrompt,
+    buildTailorPrompt, buildTailorFixPrompt, buildCoverLetterPrompt,
+} = require('../services/prompts');
 const { dedupeKeywords, matchKeywords, normalize, detectTechTerms } = require('../utils/keywordMatcher');
 const {
     NoH1BSponsorshipPhrases,
@@ -16,8 +26,6 @@ const {
     sponsorshipFriendlyPhrases,
     sponsorshipFriendlyRegexes
 } = require('../utils/visaSponsorshipFilters');
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // JSONB columns come back from `pg` already parsed. Guard against double-parsing:
 // return the value as-is if it's already an array/object, else parse the string.
@@ -222,37 +230,13 @@ function deterministicPrecheck(work_auth, resumeRow, suppText, jdRaw) {
 // the user is still allowed to pursue only when the JD truly permits it.
 async function runEligibilityChecks(resumeRaw, jdRaw) {
     try {
-        const message = await anthropic.messages.create({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 1200,
-            messages: [{
-                role: 'user',
-                content: `You are a strict job-application eligibility screener. Compare the CANDIDATE RESUME against the JOB DESCRIPTION and decide, for each hard requirement, whether the candidate is eligible.
-
-Evaluate these dimensions (include a check only when the JD actually states a requirement for it):
-- "experience": years / seniority the JD hard-requires vs. what the resume shows
-- "graduation_year": if the JD targets a specific grad year / class (e.g. new-grad 2024, or "must graduate by 2025"), compare to the resume's graduation year
-- "degree": a hard-required degree/field vs. the resume
-- "hard_requirements": other explicit disqualifiers stated as mandatory (e.g. active security clearance, specific license/certification, on-site in a named location with no remote)
-
-RULES:
-- verdict is "pass" or "fail"
-- Only "fail" when the JD states the requirement as HARD/REQUIRED and the resume CLEARLY does not meet it
-- If the requirement is a preference ("nice to have", "preferred", "a plus") OR the JD is silent OR it's ambiguous OR the resume plausibly meets it → "pass"
-- Do NOT invent requirements not present in the JD
-- Keep "requirement" and "candidate" short factual phrases; "reason" one sentence
-
-Return ONLY valid JSON, no other text:
-{"checks": [{"name": "experience", "requirement": "", "candidate": "", "verdict": "pass", "reason": ""}]}
-
-CANDIDATE RESUME:
-${resumeRaw}
-
-JOB DESCRIPTION:
-${jdRaw}`
-            }]
+        const parsed = await callClaude({
+            label: 'eligibility',
+            model: MODELS.EXTRACTION,
+            maxTokens: 1200,
+            prompt: buildEligibilityPrompt(resumeRaw, jdRaw),
+            schema: ELIGIBILITY_SCHEMA,
         });
-        const parsed = parseClaudeJson(message.content[0].text);
         const checks = Array.isArray(parsed.checks) ? parsed.checks : [];
         const failed = checks.filter(c => c && c.verdict === 'fail');
         if (failed.length > 0) {
@@ -436,7 +420,7 @@ router.post('/precheck', verifyToken, apiLimiter, async (req, res) => {
 
         res.json({ success: true, eligible: result.eligible, checks: result.checks, stats: result.stats });
     } catch (err) {
-        res.status(500).json({ error: err.message, message: 'generateRoutes' });
+        respondError(res, err, 'generateRoutes', 'Eligibility precheck failed. Please try again.');
     }
 });
 
@@ -572,88 +556,35 @@ router.post('/analyze', verifyToken, aiLimiter, async (req, res) => {
         //    extraction, and resume parse each need only raw inputs — running
         //    them sequentially would triple the wait for no benefit. Each is
         //    skipped entirely when a cached result exists (cost: $0). ────────
-        const jdTask = jdData ? Promise.resolve(null) : anthropic.messages.create({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 1500,
-            messages: [{
-                role: 'user',
-                content: `You are a job description parser. Extract the following from this job description and return valid JSON only, no other text:
-
-{
-    "location": "",
-    "salary": "",
-    "experience_needed": "",
-    "preferred_qualifications": [],
-    "must_have_qualifications": []
-}
-
-For salary: extract the full salary range/amount as a string (e.g. "$120k-$160k", "$180,000/yr"). If no salary is mentioned, return "Not specified".
-
-Job description:
-${raw_text}`
-            }]
+        const jdTask = jdData ? Promise.resolve(null) : callClaude({
+            label: 'jd-parse',
+            model: MODELS.EXTRACTION,
+            maxTokens: 1500,
+            prompt: buildJdParsePrompt(raw_text),
+            schema: JD_PARSE_SCHEMA,
         });
 
-        const kwTask = storedKeywords ? Promise.resolve(null) : anthropic.messages.create({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 4000,
-            messages: [{
-                role: 'user',
-                content: `You are an ATS keyword extraction engine. From the job description below, enumerate EVERY distinct skill, technology, tool, platform, framework, methodology, certification, and domain term that a keyword-based ATS scanner would check a resume against.
-
-Rules:
-- "term": the exact wording used in the JD
-- "category" — rank each keyword by how the JD itself weights it:
-  - "must_have": listed under Requirements/Qualifications/Responsibilities, or framed with "required", "must", "need", "strong experience in", "proficiency in", years-of-experience demands
-  - "preferred": framed as "nice to have", "good to have", "preferred", "a plus", "is a plus", "bonus", "extras", "would be great", "familiarity with", or listed under a Preferred/Bonus/Nice-to-have section
-  - "domain": general industry or role vocabulary that appears in the JD body but is not an explicit requirement (e.g. "SaaS", "B2B", "agile")
-- When the same skill appears both as required and as preferred, categorize it "must_have"
-- "aliases": common abbreviations, full-form expansions, and alternate spellings of the term (e.g. "JavaScript" → ["JS"], "Amazon Web Services" → ["AWS"])
-- Include soft-skill keywords only when the JD explicitly states them (e.g. "cross-functional collaboration")
-- Do NOT invent terms that are not in the JD
-- No duplicates
-- A full JD typically yields 30–80 keywords
-
-Return ONLY valid JSON, no other text:
-{"keywords": [{"term": "", "category": "must_have", "aliases": [""]}]}
-
-Job description:
-${raw_text}`
-            }]
+        const kwTask = storedKeywords ? Promise.resolve(null) : callClaude({
+            label: 'keywords',
+            model: MODELS.EXTRACTION,
+            maxTokens: 4000,
+            prompt: buildKeywordsPrompt(raw_text),
+            schema: KEYWORDS_SCHEMA,
         });
 
-        const parseTask = parsedResumeRow.name ? Promise.resolve(null) : anthropic.messages.create({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 1500,
-            messages: [{
-                role: 'user',
-                content: `You are a resume parser. Extract the following information from this resume text and return it as valid JSON only, no other text:
-
-        {
-            "name": "full name",
-            "email": "email address",
-            "phone": "phone number",
-            "summary": "professional summary or objective",
-            "skills": ["skill1", "skill2"],
-            "experience": [{"company": "", "title": "", "duration": "", "description": ""}],
-            "education": [{"institution": "", "degree": "", "year": ""}],
-            "projects": [{"name": "", "description": "", "technologies": "", "github_url": "GitHub repo URL for this project if present, else null", "live_url": "Live demo URL for this project if present, else null"}],
-            "github_url": "GitHub profile URL (github.com/username) if present, else null",
-            "linkedin_url": "LinkedIn profile URL (linkedin.com/in/...) if present, else null",
-            "portfolio_url": "Personal website/portfolio URL (NOT GitHub, NOT LinkedIn) if present, else null"
-        }
-
-        Resume text:
-        ${resumeRaw}`
-            }]
+        const parseTask = parsedResumeRow.name ? Promise.resolve(null) : callClaude({
+            label: 'resume-parse',
+            model: MODELS.EXTRACTION,
+            maxTokens: 2500,
+            prompt: buildResumeParsePrompt(resumeRaw),
+            schema: RESUME_PARSE_SCHEMA,
         });
 
-        const [jdMessage, kwMessage, parseMessage] = await Promise.all([jdTask, kwTask, parseTask]);
+        const [jdResult, kwResult, parseResult] = await Promise.all([jdTask, kwTask, parseTask]);
 
-        if (jdMessage) jdData = parseClaudeJson(jdMessage.content[0].text);
-        if (kwMessage) {
-            const kwData = parseClaudeJson(kwMessage.content[0].text);
-            storedKeywords = Array.isArray(kwData.keywords) ? kwData.keywords : [];
+        if (jdResult) jdData = jdResult;
+        if (kwResult) {
+            storedKeywords = Array.isArray(kwResult.keywords) ? kwResult.keywords : [];
             if (storedKeywords.length === 0) {
                 return res.status(500).json({ error: 'Keyword extraction returned no keywords — cannot score this JD.', message: 'generateRoutes' });
             }
@@ -688,8 +619,8 @@ ${raw_text}`
         const keywords = dedupeKeywords(storedKeywords);
 
         // ── Persist resume parse if it just ran ─────────────────────────────
-        if (parseMessage) {
-            const parsedResume = parseClaudeJson(parseMessage.content[0].text);
+        if (parseResult) {
+            const parsedResume = parseResult;
             await pool.query(
                 `UPDATE resume_parsed_data
                  SET name=$1, email=$2, phone=$3, summary=$4, skills=$5, experience=$6, education=$7, projects=$8,
@@ -748,30 +679,13 @@ ON CONFLICT (resume_id, project_name) DO NOTHING`,
             if (minableMissing.length === 0) return [];
             const candidateMaterial = suppText ? `${resumeRaw}\n\nVERIFIED ADDITIONAL FACTS:\n${suppText}` : resumeRaw;
             try {
-                const mineMessage = await anthropic.messages.create({
-                    model: 'claude-haiku-4-5-20251001',
-                    max_tokens: 2000,
-                    messages: [{
-                        role: 'user',
-                        content: `You are a strict resume evidence auditor. For each keyword below, determine whether the candidate's material contains CONCRETE evidence of that exact skill or technology under different wording (e.g. "built REST endpoints with Express" is real evidence of "API development").
-
-RULES:
-- "quote" must be copied VERBATIM from the candidate material — a phrase or bullet, max 200 characters
-- Only include a keyword when the material genuinely demonstrates that specific skill. Adjacent or related skills do NOT count (knowing JavaScript is NOT evidence of TypeScript; using MySQL is NOT evidence of PostgreSQL)
-- If in doubt, leave it out. Omitting is always safer than stretching.
-- Omit keywords with no real evidence entirely — do not include them with empty quotes
-
-KEYWORDS TO CHECK:
-${JSON.stringify(minableMissing.map(m => m.term))}
-
-CANDIDATE MATERIAL:
-${candidateMaterial}
-
-Return ONLY valid JSON, no other text:
-{"inferred": [{"term": "", "quote": ""}]}`
-                    }]
+                const mined = await callClaude({
+                    label: 'evidence-mining',
+                    model: MODELS.EXTRACTION,
+                    maxTokens: 2000,
+                    prompt: buildEvidenceMiningPrompt(minableMissing.map(m => m.term), candidateMaterial),
+                    schema: EVIDENCE_SCHEMA,
                 });
-                const mined = parseClaudeJson(mineMessage.content[0].text);
                 const normMaterial = normalize(candidateMaterial);
                 const missingByTerm = new Map(minableMissing.map(m => [m.term, m]));
                 return (Array.isArray(mined.inferred) ? mined.inferred : [])
@@ -783,7 +697,7 @@ Return ONLY valid JSON, no other text:
                     .map(it => ({
                         term: it.term,
                         category: missingByTerm.get(it.term).category,
-                        quote: String(it.quote).trim().slice(0, 300),
+                        quote: String(it.quote).trim().slice(0, 250),
                     }));
             } catch {
                 // Evidence mining is best-effort — a failure here must never
@@ -794,54 +708,21 @@ Return ONLY valid JSON, no other text:
 
         // ── Holistic fit (Claude judgment — separate from keyword coverage).
         //    Runs CONCURRENTLY with evidence mining above. ────────────────────
-        const matchPromise = anthropic.messages.create({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 1500,
-            messages: [{
-                role: 'user',
-                content: `You are a senior technical recruiter evaluating candidate fit for a role.
-
-RESUME:
-${resumeRaw}
-${suppText ? `\nADDITIONAL CANDIDATE FACTS (user-verified):\n${suppText}\n` : ''}
-JOB DESCRIPTION:
-${raw_text}
-
-MUST-HAVE QUALIFICATIONS (already extracted):
-${JSON.stringify(jdData.must_have_qualifications)}
-
-PREFERRED QUALIFICATIONS:
-${JSON.stringify(jdData.preferred_qualifications)}
-
-Your task: produce a holistic fit score. Consider:
-- Direct skill matches (exact technologies, tools, languages)
-- Transferable experience (related domains, similar tech, comparable scope)
-- Seniority alignment (years of experience, scope of responsibility)
-- Domain knowledge overlap
-
-Scoring guidance:
-- 80–100: Strong match — has most must-have skills plus relevant experience
-- 60–79: Good match — has core skills, some gaps in preferred areas
-- 40–59: Partial match — some relevant skills, notable gaps in must-haves
-- 20–39: Weak match — limited overlap, significant retraining required
-- 0–19: Poor match — fundamentally different background
-
-For matching_skills: list skills/tools/technologies from the resume that are explicitly or closely related to the JD requirements.
-For missing_skills: list must-have JD requirements absent from the resume.
-For gaps: list experience-level or domain gaps (e.g. "No experience leading teams", "No cloud platform exposure").
-
-Return ONLY this JSON, no other text:
-{
-    "match_score": <0-100>,
-    "matching_skills": ["skill1", "skill2"],
-    "missing_skills": ["missing1", "missing2"],
-    "gaps": ["gap description 1", "gap description 2"]
-}`
-            }]
+        const matchPromise = callClaude({
+            label: 'holistic-match',
+            model: MODELS.EXTRACTION,
+            maxTokens: 1500,
+            prompt: buildMatchPrompt({
+                resumeRaw,
+                suppText,
+                jdRaw: raw_text,
+                mustHave: jdData.must_have_qualifications,
+                preferred: jdData.preferred_qualifications,
+            }),
+            schema: MATCH_SCHEMA,
         });
 
-        const [inferred, matchMessage] = await Promise.all([miningPromise, matchPromise]);
-        const matchResult = parseClaudeJson(matchMessage.content[0].text);
+        const [inferred, matchResult] = await Promise.all([miningPromise, matchPromise]);
 
         // ── Persist baseline scores ─────────────────────────────────────────
         await pool.query(
@@ -898,7 +779,7 @@ Return ONLY this JSON, no other text:
         });
 
     } catch (err) {
-        res.status(500).json({ error: err.message, message: 'generateRoutes' });
+        respondError(res, err, 'generateRoutes', 'Job analysis failed. Please try again.');
     }
 });
 
@@ -918,30 +799,13 @@ router.post('/extract-job', verifyToken, aiLimiter, async (req, res) => {
         }
         const text = raw.slice(0, 30000);
 
-        const message = await anthropic.messages.create({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 3000,
-            messages: [{
-                role: 'user',
-                content: `This text was scraped from a job-posting web page. It contains page noise: lists of OTHER job openings (title/company/location snippets), navigation, buttons, and UI labels. Exactly ONE job is described in full detail.
-
-Extract that one job. Return ONLY valid JSON, no other text:
-{"job_title": "", "company_name": "", "job_description": "", "location": "", "salary": "", "experience_needed": "", "preferred_qualifications": [], "must_have_qualifications": []}
-
-Rules:
-- "job_title": the title of the ONE fully-described job
-- "company_name": the company hiring for THAT job (not companies from the side lists)
-- "job_description": the complete description of THAT job — responsibilities, requirements, qualifications, benefits — preserved VERBATIM from the text. Do not summarize, do not rewrite. Exclude all other job listings, navigation, and UI text.
-- "location", "salary", "experience_needed": from THAT job; salary "Not specified" if absent
-- "must_have_qualifications" / "preferred_qualifications": THAT job's stated required vs nice-to-have qualifications
-- If no fully-described job exists in the text, return the JSON with all fields empty
-
-Scraped page text:
-${text}`
-            }]
+        const parsed = await callClaude({
+            label: 'extract-job',
+            model: MODELS.EXTRACTION,
+            maxTokens: 5000,
+            prompt: buildExtractJobPrompt(text),
+            schema: EXTRACT_JOB_SCHEMA,
         });
-
-        const parsed = parseClaudeJson(message.content[0].text);
         const job_title = typeof parsed.job_title === 'string' ? parsed.job_title.trim() : '';
         const company_name = typeof parsed.company_name === 'string' ? parsed.company_name.trim() : '';
         const job_description = typeof parsed.job_description === 'string' ? parsed.job_description.trim() : '';
@@ -966,7 +830,7 @@ ${text}`
             },
         });
     } catch (err) {
-        res.status(500).json({ error: err.message, message: 'generateRoutes' });
+        respondError(res, err, 'generateRoutes', 'Could not extract the job from the captured page. Please try again.');
     }
 });
 
@@ -1060,131 +924,30 @@ router.post('/finalize', verifyToken, aiLimiter, async (req, res) => {
         //    cover letter depends only on the original resume + JD, not on
         //    the tailored output, so serializing them doubled the wait. ──────
         const tailorChain = (async () => {
-        const tailorMessage = await anthropic.messages.create({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 4096,
-            messages: [{
-                role: 'user',
-                content: `You are an ATS optimization specialist and elite resume writer. Your primary objective is to rewrite this candidate's resume so it scores as high as possible in Applicant Tracking Systems for this specific job, while remaining 100% factually accurate.
-
-Today's date: ${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}.
-
-${enrichmentBlock}${supplementsBlock}═══════════════════════════════════
-CANDIDATE RESUME (source of truth — do not invent anything not here or in the verified blocks above):
-═══════════════════════════════════
-${resumeRaw}
-
-═══════════════════════════════════
-TARGET JOB DESCRIPTION:
-═══════════════════════════════════
-${jobRow.raw_text}
-
-═══════════════════════════════════
-JD REQUIREMENTS (pre-extracted):
-═══════════════════════════════════
-Must-have: ${JSON.stringify(mustHave)}
-Preferred: ${JSON.stringify(preferred)}
-Candidate's gaps: ${JSON.stringify(missingSkills)}
-
-═══════════════════════════════════
-KEYWORDS TO MIRROR (highest priority — the candidate VERIFIABLY has every term below, from the resume or the verified facts. Each term must appear VERBATIM in the final resume: in the TECHNICAL SKILLS section and, where the source material supports it, in at least one experience/project bullet):
-═══════════════════════════════════
-${JSON.stringify(candidateHasTerms)}
-
-═══════════════════════════════════
-ATS KEYWORD RULES:
-═══════════════════════════════════
-1. Use the EXACT terminology from the list above — if it says "Node.js" use "Node.js" not "NodeJS"; if it says "CI/CD" use "CI/CD".
-2. For important terms, include both the full form and abbreviation on first use: e.g. "Amazon Web Services (AWS)".
-3. Mirror the JD's category language in the TECHNICAL SKILLS section (Languages / Frameworks / Cloud / Tools).
-4. Every technology from the original resume must still be listed — do not drop anything.
-5. Do NOT insert keywords that are NOT in the list above and NOT in the source material — missing skills stay missing.
-
-═══════════════════════════════════
-BULLET POINT RULES:
-═══════════════════════════════════
-- Lead with a strong past-tense action verb: Built, Engineered, Designed, Optimized, Reduced, Increased, Led, Deployed, Architected, Automated, Migrated, Scaled, Implemented, Delivered
-- Use XYZ format: "Accomplished [X] as measured by [Y] by doing [Z]"
-- Every bullet must include a metric OR a concrete scope indicator (count, %, $, ms, users, team size, request volume)
-- If the original resume has no metric for a bullet, reframe with stronger language and scope — do NOT invent numbers
-- Weave keywords naturally into bullets — do not stuff them awkwardly
-- 2–4 bullets per role, each max 2 lines
-- Most relevant bullets first within each role
-
-═══════════════════════════════════
-SUMMARY SECTION RULES:
-═══════════════════════════════════
-- 2–3 sentences maximum
-- Name-drop the target role title and 2–3 of the JD's most important must-have skills the candidate has
-- Show seniority and impact, not personality traits
-- No clichés: "passionate", "detail-oriented", "team player", "results-driven"
-
-═══════════════════════════════════
-INTEGRITY RULES (never violate):
-═══════════════════════════════════
-- Do NOT fabricate companies, titles, durations, projects, technologies, certifications, or metrics
-- Do NOT swap or add technologies the candidate did not use. If their resume says .NET, keep .NET
-- Do NOT add certifications absent from the original resume and verified facts
-- Do NOT address gaps by inventing experience — leave the gap unaddressed
-- Content in the USER-VERIFIED and USER-PROVIDED blocks is user-attested truth: use it, exactly as factual as the resume
-
-═══════════════════════════════════
-OUTPUT FORMAT — copy this structure EXACTLY. Plain text only. No markdown.
-═══════════════════════════════════
-
-[Candidate Full Name]
-[Phone] | [Email] | [GitHub: url] | [LinkedIn: url] | [Portfolio: url]
-
-SUMMARY
-
-[2–3 sentence summary. Must name the target role and top 2–3 must-have skills from JD.]
-
-EXPERIENCE
-
-[Company Name] | [Mon YYYY] – [Mon YYYY or Present]
-[Job Title]
-• [action verb + achievement + metric/scope + keyword woven in]
-• [action verb + achievement + metric/scope]
-
-PROJECTS
-
-[Project Name]
-Links: GitHub: <url> | Live: <url>
-• [What it does + exact technologies + measurable impact]
-
-EDUCATION
-
-[Institution Name] | [Degree, Major] | [Graduation Year]
-[GPA: X.X/4.0 — include only if ≥ 3.5]
-
-TECHNICAL SKILLS
-
-Languages: [ALL languages from original resume + verified facts]
-Frameworks: [ALL frameworks]
-Databases: [ALL databases]
-Cloud: [ALL cloud tools/platforms]
-Tools: [ALL dev tools, CI/CD, testing, monitoring]
-Certifications: [only if present in source material — omit this line if none]
-
-FORMAT RULES:
-- Line 1: name only. Line 2: contact with " | " separator. Blank line. Then sections.
-- Section headers ALL CAPS, blank line before each.
-- Company+date on ONE line: "Company | Mon YYYY – Mon YYYY". Job title on VERY NEXT LINE.
-- Blank line between job entries. No blank lines between job title and its bullets.
-- Bullets use "•" only.
-- No markdown: no **, no ##, no backticks.
-- Omit PROJECTS if no projects in source material.
-- Aim for 600–750 words — dense but readable.
-
-Return ONLY the resume. No commentary, no preamble, no trailing text.`
-            }]
-        });
-
-        if (tailorMessage.stop_reason === 'max_tokens') {
-            throw new Error('Resume too long — output was cut off. Try a shorter resume.');
+        let tailoredResume;
+        try {
+            tailoredResume = await callClaude({
+                label: 'tailor',
+                model: MODELS.GENERATION,
+                maxTokens: 4096,
+                prompt: buildTailorPrompt({
+                    enrichmentBlock,
+                    supplementsBlock,
+                    resumeRaw,
+                    jdRaw: jobRow.raw_text,
+                    mustHave,
+                    preferred,
+                    missingSkills,
+                    candidateHasTerms,
+                    today: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+                }),
+            });
+        } catch (err) {
+            if (err.code === 'CLAUDE_TRUNCATED') {
+                throw new UserFacingError('Resume too long — output was cut off. Try a shorter resume.');
+            }
+            throw err;
         }
-
-        let tailoredResume = tailorMessage.content[0].text.replace(/```json\n?|\n?```/g, '').trim();
 
         // ── Deterministic score of the tailored output ──────────────────────
         let finalCoverage = matchKeywords(keywords, [{ name: 'resume', text: tailoredResume }]);
@@ -1197,34 +960,23 @@ Return ONLY the resume. No commentary, no preamble, no trailing text.`
             .map(m => m.term);
 
         if (droppedTerms.length > 0) {
-            const fixMessage = await anthropic.messages.create({
-                model: 'claude-haiku-4-5-20251001',
-                max_tokens: 4096,
-                messages: [{
-                    role: 'user',
-                    content: `The tailored resume below is missing keywords the candidate verifiably has (they appear in the candidate's source material). Edit the resume so each term below appears VERBATIM — add each to the TECHNICAL SKILLS section and, where the source material supports it, weave into a relevant bullet. Change nothing else. Do not add any term not in this list.
-
-MISSING TERMS (each must appear verbatim):
-${JSON.stringify(droppedTerms)}
-
-CANDIDATE SOURCE MATERIAL (for truthful placement):
-${resumeRaw}
-${suppText ? `\nVERIFIED ADDITIONAL FACTS:\n${suppText}` : ''}
-
-TAILORED RESUME TO FIX:
-${tailoredResume}
-
-Return ONLY the complete corrected resume. Plain text, same format, no commentary.`
-                }]
-            });
-            if (fixMessage.stop_reason !== 'max_tokens') {
-                const fixed = fixMessage.content[0].text.replace(/```json\n?|\n?```/g, '').trim();
+            try {
+                const fixed = await callClaude({
+                    label: 'tailor-fix',
+                    model: MODELS.GENERATION,
+                    maxTokens: 4096,
+                    prompt: buildTailorFixPrompt({ droppedTerms, resumeRaw, suppText, tailoredResume }),
+                });
                 const fixedCoverage = matchKeywords(keywords, [{ name: 'resume', text: fixed }]);
                 // Keep the correction only if it actually improved coverage
                 if (fixedCoverage.score >= finalCoverage.score) {
                     tailoredResume = fixed;
                     finalCoverage = fixedCoverage;
                 }
+            } catch (err) {
+                // Corrective pass is best-effort — on truncation or API failure
+                // keep the original tailored output and its honest score.
+                console.error(err);
             }
         }
 
@@ -1237,89 +989,50 @@ Return ONLY the complete corrected resume. Plain text, same format, no commentar
             const experienceData = asArray(parsedResumeRow.experience);
             const projectsData   = asArray(parsedResumeRow.projects);
 
-            const techExtractionMessage = await anthropic.messages.create({
-                model: 'claude-haiku-4-5-20251001',
-                max_tokens: 1000,
-                messages: [{
-                    role: 'user',
-                    content: `Extract the exact technologies used in each role and project from this resume data. Return ONLY valid JSON, no other text:
-{
-  "experience": [{"company": "", "title": "", "technologies": []}],
-  "projects": [{"name": "", "technologies": []}]
-}
+            // Ground truth comes straight from stored parsed data — the resume
+            // parse now captures technologies per role and per project, so no
+            // Claude call is needed. Fallback: rows parsed before
+            // experience[].technologies existed get ONE extraction call.
+            const asTechList = (v) => Array.isArray(v) ? v
+                : (typeof v === 'string' && v.trim() ? v.split(/,\s*/) : []);
+            const isNewFormat = experienceData.length === 0 ||
+                experienceData.every(e => Array.isArray(e.technologies));
 
-Experience data:
-${JSON.stringify(experienceData)}
+            let expTech, projTech;
+            if (isNewFormat) {
+                expTech = experienceData.map(e => ({ title: e.title, company: e.company, technologies: asTechList(e.technologies) }));
+                projTech = projectsData.map(p => ({ name: p.name, technologies: asTechList(p.technologies) }));
+            } else {
+                const techData = await callClaude({
+                    label: 'tech-extract-legacy',
+                    model: MODELS.EXTRACTION,
+                    maxTokens: 1000,
+                    prompt: buildTechExtractionPrompt(experienceData, projectsData),
+                    schema: TECH_EXTRACTION_SCHEMA,
+                });
+                expTech = techData.experience || [];
+                projTech = techData.projects || [];
+            }
 
-Projects data:
-${JSON.stringify(projectsData)}`
-                }]
-            });
-            const techData = parseClaudeJson(techExtractionMessage.content[0].text);
-
-            const experienceTech = (techData.experience || []).map(exp =>
-                `- ${exp.title} at ${exp.company}: ${(exp.technologies || []).join(', ')}`
+            const experienceTech = expTech.map(exp =>
+                `- ${exp.title} at ${exp.company}: ${(exp.technologies || []).join(', ') || '(no technologies named for this role)'}`
             ).join('\n');
-            const projectTech = (techData.projects || []).map(project =>
-                `- ${project.name}: ${(project.technologies || []).join(', ')}`
+            const projectTech = projTech.map(project =>
+                `- ${project.name}: ${(project.technologies || []).join(', ') || '(no technologies named for this project)'}`
             ).join('\n');
 
-            const coverMessage = await anthropic.messages.create({
-                model: 'claude-haiku-4-5-20251001',
-                max_tokens: 1500,
-                messages: [{
-                    role: 'user',
-                    content: `You are a world-class career coach writing a cover letter on behalf of a candidate. Your output must read as if a sharp, self-aware human wrote it — not an AI assistant.
-
-Resume:
-${resumeRaw}
-${suppText ? `\nVERIFIED ADDITIONAL CANDIDATE FACTS:\n${suppText}\n` : ''}
-Job Description:
-${jobRow.raw_text}
-
-GROUND TRUTH — Technology stack per role (DO NOT deviate from this under any circumstances):
-${experienceTech}
-
-GROUND TRUTH — Technology stack per project (DO NOT deviate from this under any circumstances):
-${projectTech}
-
-Before writing, extract 4 to 6 high-value keywords or skill phrases from the job description (tools, competencies, outcome types). Weave them into the letter naturally — do not keyword-stuff or list them.
-
-Structure — 4 Short Paragraphs, 200 to 320 words total:
-
-PARAGRAPH 1 — Opening Hook (2 to 3 sentences):
-- Do NOT open with "I am writing to apply" or anything similar.
-- Open with a specific, verifiable achievement from the resume that directly maps to the role — then tie it immediately to something concrete about THIS company: its mission, a product, a recent launch, or a stated value from the JD.
-- The hook should feel like the candidate researched the role, not just the job title.
-
-PARAGRAPH 2 — Strongest Proof Point (3 to 4 sentences):
-- Lead with the single most relevant metric or accomplishment from the resume.
-- Frame it using PAR structure: what was the problem/context, what action the candidate took, and the measurable result.
-- Mirror at least 2 keywords from the JD here naturally.
-- When mentioning technologies from professional experience, use ONLY what is listed under GROUND TRUTH for that role.
-
-PARAGRAPH 3 — Supporting Skill or Project (2 to 3 sentences):
-- Pick one additional skill, project, or experience that fills a secondary requirement from the JD.
-- Include one concrete detail (technology used, scope, outcome).
-- Use ONLY the technologies listed under GROUND TRUTH for that specific project.
-- Keep it tight — this paragraph supports, not repeats.
-
-PARAGRAPH 4 — Closing (2 sentences max):
-- Express enthusiasm for the role specifically (not generically).
-- End with a confident, human call-to-action — NOT "I look forward to hearing from you" or "Please find attached."
-
-Voice & Style Rules:
-- First person, confident but not arrogant.
-- Vary sentence length — mix short punchy sentences with longer ones. Avoid uniform rhythm.
-- Allow slight informality where natural — a real human sounds like one.
-- No clichés: "hard worker," "team player," "passionate," "excited to apply," "I would be a great fit," "leverage," "utilize," "Please find attached," "synergy," "dynamic," "I look forward to hearing from you."
-- Do not repeat resume lines verbatim — expand on context, motivation, and impact.
-- Write as if the candidate would read this aloud to a friend — natural, varied, human.
-
-Return ONLY the cover letter body text. No subject line, no greeting header, no sign-off block, no explanation. Start directly with Paragraph 1.`
-                }]
+            return callClaude({
+                label: 'cover-letter',
+                model: MODELS.GENERATION,
+                maxTokens: 1500,
+                prompt: buildCoverLetterPrompt({
+                    resumeRaw,
+                    suppText,
+                    jdRaw: jobRow.raw_text,
+                    experienceTech,
+                    projectTech,
+                }),
             });
-            return coverMessage.content[0].text.replace(/```json\n?|\n?```/g, '').trim();
         })();
 
         const [{ tailoredResume, finalCoverage }, coverLetter] = await Promise.all([tailorChain, coverChain]);
@@ -1375,7 +1088,7 @@ Return ONLY the cover letter body text. No subject line, no greeting header, no 
         });
 
     } catch (err) {
-        res.status(500).json({ error: err.message, message: 'generateRoutes' });
+        respondError(res, err, 'generateRoutes', 'Document generation failed. Please try again.');
     }
 });
 

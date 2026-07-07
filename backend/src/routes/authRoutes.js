@@ -16,6 +16,16 @@ router.post('/register', authLimiter, async (req, res) => {
         if (!name || !email || !password) {
             return res.status(400).json({ error: "All fields are required" });
         }
+        if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+            return res.status(400).json({ error: "Please enter a valid email address" });
+        }
+        if (typeof password !== 'string' || password.length < 8 || password.length > 72) {
+            // 72-byte upper bound: bcrypt truncates anything longer
+            return res.status(400).json({ error: "Password must be 8–72 characters" });
+        }
+        if (typeof name !== 'string' || name.trim().length === 0 || name.length > 100) {
+            return res.status(400).json({ error: "Name must be 1–100 characters" });
+        }
 
         const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
         if (result.rows.length > 0) {
@@ -30,7 +40,8 @@ router.post('/register', authLimiter, async (req, res) => {
 
 
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Registration failed. Please try again.', message: 'authRoutes' });
     }
 });
 
@@ -64,12 +75,14 @@ router.post('/login', authLimiter, async (req, res) => {
             }
         };
         const token = jwt.sign(payload, process.env.JWT_SECRET, {
-            expiresIn: process.env.JWT_EXPIRES_IN
+            // Fallback so a missing env var can never mint tokens that live forever
+            expiresIn: process.env.JWT_EXPIRES_IN || '7d'
         });
         res.json({ success: true, token, user: payload.user });
 
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Login failed. Please try again.', message: 'authRoutes' });
     }
 });
 
@@ -85,7 +98,8 @@ router.get('/me', verifyToken, async (req, res) => {
         }
         res.json({ user: result.rows[0] });
     } catch (err) {
-        res.status(500).json({ error: err.message, message: 'authRoutes' });
+        console.error(err);
+        res.status(500).json({ error: 'Failed to load profile.', message: 'authRoutes' });
     }
 });
 
@@ -103,7 +117,8 @@ router.patch('/work-auth', verifyToken, async (req, res) => {
         );
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: err.message, message: 'authRoutes' });
+        console.error(err);
+        res.status(500).json({ error: 'Failed to update work authorization.', message: 'authRoutes' });
     }
 });
 
@@ -120,7 +135,7 @@ router.get('/google/callback',
             }
         };
         const token = jwt.sign(payload, process.env.JWT_SECRET, {
-            expiresIn: process.env.JWT_EXPIRES_IN
+            expiresIn: process.env.JWT_EXPIRES_IN || '7d'
         });
         // Token travels in the URL FRAGMENT, not the query string —
         // fragments never reach server logs, proxies, or the Referer header.

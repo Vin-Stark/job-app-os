@@ -26,8 +26,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   const data = await res.json()
 
-  // Backend inconsistency: applicationRoutes returns errors on 200 with { error, message }
-  if (!res.ok || data.error) {
+  if (!res.ok) {
     throw new ApiError(res.status, data.error || 'Request failed')
   }
 
@@ -48,7 +47,7 @@ async function requestForm<T>(path: string, body: FormData): Promise<T> {
   }
 
   const data = await res.json()
-  if (!res.ok || data.error) {
+  if (!res.ok) {
     throw new ApiError(res.status, data.error || 'Request failed')
   }
   return data as T

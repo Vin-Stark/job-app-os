@@ -4,6 +4,15 @@ const nodemailer = require('nodemailer');
 
 
 
+// Company/title/status come from user-submitted JD text — escape them before
+// they're interpolated into email HTML so pasted markup can't inject content.
+const escapeHtml = (val) => String(val ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
@@ -39,9 +48,9 @@ WHERE ja.created_at >= NOW() - INTERVAL '7 days'
         // Build the email body
         const appRows = applications.map(app => `
     <tr>
-        <td style="padding:14px;">${app.company_name}</td>
-        <td style="padding:14px;">${app.job_title}</td>
-        <td style="padding:14px;">${app.status}</td>
+        <td style="padding:14px;">${escapeHtml(app.company_name)}</td>
+        <td style="padding:14px;">${escapeHtml(app.job_title)}</td>
+        <td style="padding:14px;">${escapeHtml(app.status)}</td>
         <td style="padding:14px;">${new Date(app.applied_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
     </tr>
 `).join('');

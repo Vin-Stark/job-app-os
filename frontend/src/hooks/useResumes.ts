@@ -4,7 +4,6 @@ import { api } from '@/api/client'
 export interface Resume {
   id: number
   filename: string
-  s3_url: string
   file_size: number | null
   created_at: string
 }

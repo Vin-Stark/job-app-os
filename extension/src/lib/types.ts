@@ -45,7 +45,6 @@ export interface PrecheckResponse {
 export interface Resume {
   id: number
   filename: string
-  s3_url: string
   file_size: number
   created_at: string
 }
