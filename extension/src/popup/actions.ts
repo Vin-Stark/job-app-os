@@ -170,8 +170,11 @@ export async function enableDragOnTab(filename: string, dataUrl: string): Promis
     throw new Error('Open the application page (with the upload field) before enabling drag.')
   }
   try {
+    // MAIN world: the synthetic drop's DataTransfer must be readable by the
+    // page's own handlers — isolated-world wrappers can hide it.
     await chrome.scripting.executeScript({
       target: { tabId: tab.id! },
+      world: 'MAIN',
       func: injectDragHandle,
       args: [filename, dataUrl],
     })
@@ -183,6 +186,7 @@ export async function enableDragOnTab(filename: string, dataUrl: string): Promis
     }
     await chrome.scripting.executeScript({
       target: { tabId: tab.id! },
+      world: 'MAIN',
       func: injectDragHandle,
       args: [filename, dataUrl],
     })
