@@ -47,6 +47,14 @@ export interface ResumeGaps {
   has_open_source_opportunity: boolean
 }
 
+// Code-computed interview-chances band for the match score — the text comes
+// from the backend (utils/matchBands.js) so web app and extension always agree.
+export interface Recommendation {
+  band: string
+  interview_chances: string
+  advice: string
+}
+
 export interface AnalyzeResult {
   job_id: number
   job: {
@@ -64,9 +72,22 @@ export interface AnalyzeResult {
     missing_skills: string[]
     gaps: string[]
   }
+  recommendation: Recommendation
   coverage: Coverage
   inferred: InferredEvidence[]
+  skills_breakdown: SkillsBreakdown
   resume_gaps: ResumeGaps
+}
+
+// Skill gaps split by what they mean for the application (evidence-verified
+// server-side, never fed into the ATS score): must-have gaps surface with the
+// eligibility checks; proof-based skills are already evidenced in the resume;
+// trainable ones have a same-kind tool the candidate knows.
+export interface SkillsBreakdown {
+  must_have_missing: string[]
+  proof_based: { term: string; category: string; quote: string }[]
+  trainable: { term: string; category: string; similar_skill: string }[]
+  not_covered: string[]
 }
 
 export interface AnalyzePayload {

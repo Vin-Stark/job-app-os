@@ -28,8 +28,8 @@ export function RecentList({ entries, onOpen, onClear }: {
                 <span className="text-[12px] text-slate-200 truncate">
                   <b>{e.company || 'Unknown'}</b> · {e.title || 'Untitled role'}
                 </span>
-                {e.score != null && (
-                  <span className="shrink-0 text-[11px] text-slate-400">ATS {e.score}%</span>
+                {e.matchScore != null && (
+                  <span className="shrink-0 text-[11px] text-slate-400">Match {e.matchScore}%</span>
                 )}
               </div>
               <div className="text-[10px] text-slate-600">{relativeTime(e.savedAt)}</div>

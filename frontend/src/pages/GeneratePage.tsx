@@ -357,7 +357,7 @@ export function GeneratePage({ onNavigate }: { onNavigate: (view: string) => voi
                     : 'bg-amber-950/60 border-amber-800/60'
                 }`}>
                   <span className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground font-medium" style={MONO}>
-                    ATS Coverage
+                    Keyword Coverage
                   </span>
                   <span className={`text-[13px] font-bold ${coverageColor(docs.coverage.score)}`}
                     style={{ fontFamily: 'var(--font-stat)' }}>
@@ -368,7 +368,7 @@ export function GeneratePage({ onNavigate }: { onNavigate: (view: string) => voi
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-950/60 border border-blue-800/60">
-                  <span className="text-[9px] uppercase tracking-[0.1em] text-blue-400/70 font-medium" style={MONO}>Fit</span>
+                  <span className="text-[9px] uppercase tracking-[0.1em] text-blue-400/70 font-medium" style={MONO}>Job Match</span>
                   <span className="text-[13px] font-bold text-blue-300" style={{ fontFamily: 'var(--font-stat)' }}>
                     {analysis.match.match_score}%
                   </span>

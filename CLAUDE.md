@@ -81,10 +81,13 @@ including the frontend):
    agentic frameworks. Model allocation is TIERED (amended July 2026 with
    explicit approval — was Haiku-only) and lives exclusively in
    `services/claude.js` `MODELS`; no model ID may appear anywhere else:
-   - `EXTRACTION` = `claude-haiku-4-5-20251001` — parsing, keyword extraction,
-     classification, eligibility screening, evidence mining, holistic match.
-   - `GENERATION` = `claude-sonnet-4-6` — user-facing documents only: tailored
-     resume, corrective pass, cover letter.
+   - `EXTRACTION` = `claude-haiku-4-5-20251001` — parsing, classification,
+     eligibility screening, job extraction from page scrapes.
+   - `GENERATION` = `claude-sonnet-4-6` — user-facing documents (tailored
+     resume, corrective pass, cover letter) PLUS the score-bearing judgment
+     calls: keyword extraction, evidence mining, holistic match (amended
+     July 2026 with explicit approval — accuracy of displayed percentages
+     outranks the per-call cost difference).
    Moving a task between tiers or adding a model requires updating this
    decision first.
 2. ATS scores are deterministic, never LLM-generated. Claude extracts the JD
@@ -211,7 +214,10 @@ wrong table among the five near-identical names · a JSON Claude call made
 without a `schema` (structured outputs is what guarantees parseable JSON) ·
 assuming Claude extracted a field (`job_title`, `company_name`) it was never
 prompted for · missing HTTP status on error · a schema field added without
-updating its prompt's FIELD RULES (or vice versa).
+updating its prompt's FIELD RULES (or vice versa) · a prompt that reasons
+about dates/durations without a "Today's date" anchor — Claude resolves
+"Present" against its training cutoff and computes durations years short
+(July 2026: eligibility screen read "May 2024 – Present" as ~6 months).
 Frontend: a Figma field/value ported as real data (`wishlist`, `citizen`,
 `salary`) · a hardcoded mockup value never wired to the real API · status UI
 built on 5 values instead of 8.

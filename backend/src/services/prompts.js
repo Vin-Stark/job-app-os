@@ -124,9 +124,10 @@ FIELD RULES:
 - "location": the work location as stated, including the arrangement when given (e.g. "Remote (US)", "Hybrid – Austin, TX", "On-site – New York, NY"). "Not specified" if absent.
 - "salary": the full stated range or amount as one string (e.g. "$120k–$160k", "$180,000/yr + equity"). "Not specified" if absent.
 - "experience_needed": the stated experience requirement as one short phrase (e.g. "3+ years backend development"). "Not specified" if absent.
-- "must_have_qualifications": requirements the JD presents as mandatory — items under Requirements/Qualifications/Responsibilities headings, or framed with "required", "must", "need", "strong experience in", "proficiency in", or a years-of-experience demand. One short phrase per item.
-- "preferred_qualifications": items framed as "preferred", "nice to have", "a plus", "bonus", "familiarity with", or listed under a Preferred/Bonus section.
-- A qualification that appears as both required and preferred goes under must_have only. No duplicates across or within the two lists.
+- SECTION HEADINGS OUTRANK ITEM PHRASING: an item under a heading containing "Preferred", "Nice to have", "Bonus", "Plus", or "Desired" (e.g. "Preferred Skills/Experience", "Primary Preferred Skills/Experience", "Secondary Preferred Skills/Experience") is ALWAYS a preferred qualification — even when the item itself says "experience with", "proficiency in", or demands years. Only items under Basic/Minimum/Required-Qualifications-type headings, or framed in body text as "required"/"must"/"need", are must-have.
+- "must_have_qualifications": requirements the JD presents as mandatory — items under Basic/Minimum/Required Qualifications or Requirements/Responsibilities headings, or framed with "required", "must", "need", "strong experience in", "proficiency in", or a years-of-experience demand (subject to the heading rule above). One short phrase per item.
+- "preferred_qualifications": items framed as "preferred", "nice to have", "a plus", "bonus", "familiarity with", or listed under any Preferred/Bonus-type section (see heading rule).
+- A qualification that appears in BOTH a required section and a preferred section goes under must_have only. No duplicates across or within the two lists.
 
 Job description:
 ${rawText}`;
@@ -161,10 +162,11 @@ function buildKeywordsPrompt(rawText) {
 RULES:
 - "term": the exact wording used in the JD, preserving its capitalization (e.g. "Node.js", not "node js")
 - "category" — rank each keyword by how the JD itself weights it:
-  - "must_have": listed under Requirements/Qualifications/Responsibilities, or framed with "required", "must", "need", "strong experience in", "proficiency in", years-of-experience demands
-  - "preferred": framed as "nice to have", "good to have", "preferred", "a plus", "is a plus", "bonus", "extras", "would be great", "familiarity with", or listed under a Preferred/Bonus/Nice-to-have section
+  - SECTION HEADINGS OUTRANK ITEM PHRASING: a keyword under a heading containing "Preferred", "Nice to have", "Bonus", "Plus", or "Desired" (e.g. "Preferred Skills/Experience", "Primary Preferred Skills/Experience", "Secondary Preferred Skills/Experience") is ALWAYS "preferred" — even when the item says "experience with", "proficiency in", or demands years
+  - "must_have": listed under Basic/Minimum/Required Qualifications or Requirements/Responsibilities headings, or framed in body text with "required", "must", "need", "strong experience in", "proficiency in", years-of-experience demands (subject to the heading rule above)
+  - "preferred": framed as "nice to have", "good to have", "preferred", "a plus", "is a plus", "bonus", "extras", "would be great", "familiarity with", or listed under any Preferred/Bonus/Nice-to-have-type section
   - "domain": general industry or role vocabulary that appears in the JD body but is not an explicit requirement (e.g. "SaaS", "B2B", "agile")
-- When the same skill appears both as required and as preferred, categorize it "must_have"
+- When the same skill appears in BOTH a required section and a preferred section, categorize it "must_have"
 - "aliases": up to 4 common abbreviations, full-form expansions, or alternate spellings of the term (e.g. "JavaScript" → ["JS"], "Amazon Web Services" → ["AWS"]). [] when none exist. Aliases are alternate NAMES for the same thing — never related-but-different technologies.
 - Include soft-skill keywords only when the JD explicitly states them (e.g. "cross-functional collaboration")
 - Do NOT invent terms that are not in the JD — every "term" must appear verbatim somewhere in the text below
@@ -200,8 +202,8 @@ const ELIGIBILITY_SCHEMA = {
     additionalProperties: false,
 };
 
-function buildEligibilityPrompt(resumeRaw, jdRaw) {
-    return `You are a strict job-application eligibility screener. Compare the CANDIDATE RESUME against the JOB DESCRIPTION and decide, for each hard requirement, whether the candidate is eligible.
+function buildEligibilityPrompt(resumeRaw, jdRaw, today) {
+    return `You are a strict job-application eligibility screener. Today's date is ${today}. Compare the CANDIDATE RESUME against the JOB DESCRIPTION and decide, for each hard requirement, whether the candidate is eligible.
 
 Evaluate these dimensions (include a check ONLY when the JD actually states a requirement for it):
 - "experience": years / seniority the JD hard-requires vs. what the resume shows
@@ -209,8 +211,16 @@ Evaluate these dimensions (include a check ONLY when the JD actually states a re
 - "degree": a hard-required degree/field vs. the resume
 - "hard_requirements": other explicit disqualifiers stated as mandatory (e.g. active security clearance, specific license/certification, on-site in a named location with no remote option)
 
+DATE & DURATION RULES (apply BEFORE judging any experience or graduation requirement):
+- Anchor ALL date arithmetic to today's date stated above — never to your training data. Resume dates at or beyond your knowledge are normal, not errors.
+- "Present" / "Current" in a date range means today. Compute each duration by calendar arithmetic from its start date to today (e.g. "Jan 2020 – Present" with today in June 2023 is ~3 years 5 months).
+- Total professional experience = the sum of all role durations, counting overlapping periods once.
+- A start date after today has not begun yet (e.g. a degree starting later this year is upcoming, not in progress).
+- When a check involves a duration, state the computed value and its date range in "candidate" (e.g. "~2 years 2 months (May 2024 – Present)") so the arithmetic is visible.
+
 RULES:
 - Only "fail" when BOTH are true: the JD states the requirement as HARD/REQUIRED, and the resume CLEARLY does not meet it
+- SECTION HEADINGS OUTRANK ITEM PHRASING: anything under a heading containing "Preferred", "Nice to have", "Bonus", "Plus", or "Desired" (e.g. "Primary Preferred Skills/Experience") is a preference, NEVER a hard requirement — even when the item states years of experience or says "required"/"must". Do not fail on it and do not create a check for it.
 - If the requirement is a preference ("nice to have", "preferred", "a plus") OR the JD is silent OR it is ambiguous OR the resume plausibly meets it → "pass"
 - Do NOT invent requirements the JD does not state; every "requirement" value must be traceable to the JD text
 - Do NOT invent candidate facts; every "candidate" value must be traceable to the resume (or "not stated in resume")
@@ -240,20 +250,42 @@ const EVIDENCE_SCHEMA = {
                 additionalProperties: false,
             },
         },
+        trainable: {
+            type: 'array',
+            items: {
+                type: 'object',
+                properties: {
+                    term: { type: 'string' },
+                    similar_skill: { type: 'string' },
+                },
+                required: ['term', 'similar_skill'],
+                additionalProperties: false,
+            },
+        },
     },
-    required: ['inferred'],
+    required: ['inferred', 'trainable'],
     additionalProperties: false,
 };
 
 function buildEvidenceMiningPrompt(terms, candidateMaterial) {
-    return `You are a strict resume evidence auditor. For each keyword below, determine whether the candidate's material contains CONCRETE evidence of that exact skill or technology under different wording (e.g. "built REST endpoints with Express" is real evidence of "API development").
+    return `You are a strict resume evidence auditor. For each keyword below, classify what the candidate's material actually shows about it:
 
-RULES:
+1. "inferred" — the material contains CONCRETE evidence of that exact skill or technology under different wording (e.g. "built REST endpoints with Express" is real evidence of "API development").
+2. "trainable" — the material shows NO evidence of the skill itself, but names a SIMILAR tool of the same kind that the candidate does know (e.g. keyword "MySQL" when the material names "PostgreSQL"; keyword "GCP" when the material names "AWS").
+
+RULES for "inferred":
 - "quote" must be copied character-for-character from the candidate material (surrounding whitespace aside) — a phrase or bullet, max 250 characters. Quotes are verified in code against the material; a paraphrased quote is discarded.
-- Only include a keyword when the material genuinely demonstrates that specific skill. Adjacent or related skills do NOT count: knowing JavaScript is NOT evidence of TypeScript; using MySQL is NOT evidence of PostgreSQL; using AWS EC2 is NOT evidence of Kubernetes.
-- If in doubt, leave it out. Omitting is always safer than stretching.
+- Only include a keyword when the material genuinely demonstrates that specific skill. Adjacent or related skills do NOT count as evidence: knowing JavaScript is NOT evidence of TypeScript; using MySQL is NOT evidence of PostgreSQL; using AWS EC2 is NOT evidence of Kubernetes.
 - Omit keywords with no real evidence entirely — never include one with an empty or fabricated quote.
+
+RULES for "trainable":
+- "similar_skill" must be named VERBATIM somewhere in the candidate material — it is verified in code; entries whose similar_skill the material does not contain are discarded.
+- Same kind only: a database for a database, a cloud platform for a cloud platform, a closely related language for a language, a framework for a framework in the same ecosystem. Loose domain adjacency does NOT qualify (knowing Excel is not similar to SQL; knowing Git is not similar to Jenkins).
+- A keyword appears in AT MOST one list — when it has real evidence it goes in "inferred", never in "trainable".
+
+SHARED RULES:
 - "term" must be copied exactly from the keyword list below.
+- If in doubt, leave it out. Omitting is always safer than stretching.
 
 KEYWORDS TO CHECK:
 ${JSON.stringify(terms)}
@@ -276,8 +308,8 @@ const MATCH_SCHEMA = {
     additionalProperties: false,
 };
 
-function buildMatchPrompt({ resumeRaw, suppText, jdRaw, mustHave, preferred }) {
-    return `You are a senior technical recruiter evaluating candidate fit for a role.
+function buildMatchPrompt({ resumeRaw, suppText, jdRaw, mustHave, preferred, today }) {
+    return `You are a senior technical recruiter evaluating candidate fit for a role. Today's date is ${today}. Date ranges ending in "Present" run through today — compute years of experience by calendar arithmetic anchored to this date, never to your training data.
 
 RESUME:
 ${resumeRaw}
@@ -291,18 +323,23 @@ ${JSON.stringify(mustHave)}
 PREFERRED QUALIFICATIONS:
 ${JSON.stringify(preferred)}
 
-Your task: produce a holistic fit score between 0 and 100. Consider:
-- Direct skill matches (exact technologies, tools, languages)
-- Transferable experience (related domains, similar tech, comparable scope)
-- Seniority alignment (years of experience, scope of responsibility)
-- Domain knowledge overlap
+Your task: produce a holistic fit score between 0 and 100.
 
-Scoring guidance:
-- 80–100: Strong match — has most must-have skills plus relevant experience
-- 60–79: Good match — has core skills, some gaps in preferred areas
-- 40–59: Partial match — some relevant skills, notable gaps in must-haves
-- 20–39: Weak match — limited overlap, significant retraining required
-- 0–19: Poor match — fundamentally different background
+SCORING PROCEDURE (follow these steps in order — the score must be reproducible from them):
+Step 1 — MUST-HAVE fraction: for each MUST-HAVE qualification, decide whether the resume (or verified facts) demonstrably meets it. Put the strongest evidence for each met qualification in "matching_skills".
+Step 2 — PREFERRED fraction: do the same for the PREFERRED qualifications. When the must-have list is short or generic (e.g. only a degree plus years of experience), the preferred qualifications describe the role's real day-to-day stack — they carry most of the fit signal.
+Step 3 — Pick the band below from the two fractions plus seniority alignment (years of experience, scope of responsibility), then choose ONE integer inside the band. Do NOT adjust for writing style, formatting, or enthusiasm — identical facts must always produce the same score.
+
+Scoring bands:
+- 95–100: all must-haves + essentially all preferred quals, with matching seniority — near-perfect fit
+- 90–94: all must-haves + most preferred quals
+- 85–89: all or nearly all must-haves + a solid majority of preferred quals
+- 80–84: most must-haves + a meaningful share of preferred quals
+- 70–79: core must-haves met; preferred coverage is patchy or seniority is somewhat short
+- 60–69: some must-haves missed, or must-haves met with only minor preferred overlap beyond transferable adjacent skills
+- 45–59: hard requirements met, but the role's specialist stack (per the preferred quals) is largely absent — the candidate offers transferable adjacent skills, not the named ones
+- 30–44: misses some hard requirements AND shows little of the role's stack
+- 0–29: misses most hard requirements, seniority is far off, or the background is fundamentally different
 
 GROUNDING RULES (violations make the output worthless):
 - Every "matching_skills" item must actually appear in the resume or the verified facts — never list a skill the candidate does not show.
@@ -340,7 +377,7 @@ RULES:
 - "company_name": the company hiring for THAT job (not companies from the side lists)
 - "job_description": the complete description of THAT job — responsibilities, requirements, qualifications, benefits — preserved VERBATIM from the text. Do not summarize, do not rewrite, do not add words that are not in the source. Exclude all other job listings, navigation, and UI text.
 - "location", "salary", "experience_needed": from THAT job only; use "Not specified" when absent
-- "must_have_qualifications" / "preferred_qualifications": THAT job's stated required vs nice-to-have qualifications, in the JD's own wording
+- "must_have_qualifications" / "preferred_qualifications": THAT job's stated required vs nice-to-have qualifications, in the JD's own wording. SECTION HEADINGS OUTRANK ITEM PHRASING: an item under a heading containing "Preferred", "Nice to have", "Bonus", "Plus", or "Desired" (e.g. "Primary Preferred Skills/Experience") is ALWAYS preferred, even when the item says "experience with"/"proficiency in" or demands years; only Basic/Minimum/Required-Qualifications-type headings or explicit "required"/"must" framing yield must-have
 - Never fill a field from general knowledge or from the other listings on the page — only from THAT job's own text
 - If no fully-described job exists in the text, return every string field as "" and every array as []
 
@@ -408,7 +445,7 @@ ${JSON.stringify(projectsData)}`;
 function buildTailorPrompt({ enrichmentBlock, supplementsBlock, resumeRaw, jdRaw, mustHave, preferred, missingSkills, candidateHasTerms, today }) {
     return `You are an ATS optimization specialist and elite resume writer. Rewrite this candidate's resume so it scores as high as possible in Applicant Tracking Systems and AI resume screeners for this specific job, while remaining 100% factually accurate.
 
-Today's date: ${today}.
+Today's date: ${today}. Date ranges ending in "Present" run through today — any years-of-experience figure in the summary or bullets must be computed from this date.
 
 PRIORITY ORDER — when any two rules conflict, the HIGHER rule always wins:
 1. TRUTHFULNESS (integrity rules)
@@ -549,8 +586,8 @@ Return ONLY the complete corrected resume. Plain text, same format, no commentar
 
 // ── GENERATION: cover letter ─────────────────────────────────────────────────
 
-function buildCoverLetterPrompt({ resumeRaw, suppText, jdRaw, experienceTech, projectTech }) {
-    return `You are a world-class career coach writing a cover letter on behalf of a candidate. Your output must read as if a sharp, self-aware human wrote it — not an AI assistant.
+function buildCoverLetterPrompt({ resumeRaw, suppText, jdRaw, experienceTech, projectTech, today }) {
+    return `You are a world-class career coach writing a cover letter on behalf of a candidate. Your output must read as if a sharp, self-aware human wrote it — not an AI assistant. Today's date is ${today}.
 
 Resume:
 ${resumeRaw}
@@ -567,6 +604,7 @@ ${projectTech}
 TRUTH RULES (highest priority — they outrank every style rule below):
 - Everything you say about the company must come from the JOB DESCRIPTION text itself. You have NO other knowledge of this company: never reference products, launches, news, funding, culture, or mission statements that the JD does not state.
 - Every claim about the candidate must be verifiable from the resume or the verified facts. No unverifiable superlatives ("best", "world-class", "top 1%") and no invented metrics.
+- Any duration you state ("two years at X") must be computed from the resume's date ranges anchored to today's date above — "Present" means today, not the edge of your training data.
 - When mentioning technologies, use ONLY what the GROUND TRUTH lists for that specific role or project.
 
 Before writing, extract 4 to 6 high-value keywords or skill phrases from the job description (tools, competencies, outcome types). Weave them into the letter naturally — do not keyword-stuff or list them.

@@ -16,6 +16,7 @@ const {
     buildTailorPrompt, buildTailorFixPrompt, buildCoverLetterPrompt,
 } = require('../services/prompts');
 const { dedupeKeywords, matchKeywords, normalize, detectTechTerms } = require('../utils/keywordMatcher');
+const { recommendationFor } = require('../utils/matchBands');
 const {
     NoH1BSponsorshipPhrases,
     NoOPTCPTSupportPhrases,
@@ -101,6 +102,11 @@ const TECH_FLOOR = 20;      // fail only when <20% of JD tech appears in resume
 const MIN_JD_TECH_TERMS = 5; // need ≥5 detected terms before the floor applies
 
 const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+
+// Full date ("July 7, 2026") for prompts that do duration math — without an
+// anchor, Claude resolves "Present" against its training data and computes
+// durations years short.
+const todayFullDate = () => new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
 // "May 2024 – Present", "Jan 2020 - Mar 2022", "2019 – 2021" → months (0 if unparseable)
 function durationToMonths(duration) {
@@ -234,7 +240,11 @@ async function runEligibilityChecks(resumeRaw, jdRaw) {
             label: 'eligibility',
             model: MODELS.EXTRACTION,
             maxTokens: 1200,
-            prompt: buildEligibilityPrompt(resumeRaw, jdRaw),
+            // 0 — this gate re-runs on every analyze and is not cached; a
+            // borderline candidate must not flip between eligible/ineligible
+            // across runs of the same job.
+            temperature: 0,
+            prompt: buildEligibilityPrompt(resumeRaw, jdRaw, todayFullDate()),
             schema: ELIGIBILITY_SCHEMA,
         });
         const checks = Array.isArray(parsed.checks) ? parsed.checks : [];
@@ -384,6 +394,43 @@ async function fetchProjectRows(user_id, resume_id) {
     return result.rows;
 }
 
+// Persist a fresh resume parse and fold it into the in-memory row so
+// downstream consumers (deterministic precheck, gap detection, parseTask
+// skip) see the parsed data without a re-read.
+async function persistResumeParse(user_id, resume_id, parsedResume, parsedResumeRow) {
+    await pool.query(
+        `UPDATE resume_parsed_data
+         SET name=$1, email=$2, phone=$3, summary=$4, skills=$5, experience=$6, education=$7, projects=$8,
+             github_url=$9, linkedin_url=$10, portfolio_url=$11
+         WHERE resume_id=$12 AND user_id=$13`,
+        [
+            parsedResume.name, parsedResume.email, parsedResume.phone, parsedResume.summary,
+            JSON.stringify(parsedResume.skills),
+            JSON.stringify(parsedResume.experience),
+            JSON.stringify(parsedResume.education),
+            JSON.stringify(parsedResume.projects),
+            parsedResume.github_url || null,
+            parsedResume.linkedin_url || null,
+            parsedResume.portfolio_url || null,
+            resume_id, user_id
+        ]
+    );
+    for (const proj of (parsedResume.projects || [])) {
+        await pool.query(
+            `INSERT INTO resume_projects (user_id, resume_id, project_name, github_url, live_url)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (resume_id, project_name) DO NOTHING`,
+            [user_id, resume_id, proj.name, proj.github_url || null, proj.live_url || null]
+        );
+    }
+    parsedResumeRow.name          = parsedResume.name;
+    parsedResumeRow.github_url    = parsedResume.github_url    || null;
+    parsedResumeRow.linkedin_url  = parsedResume.linkedin_url  || null;
+    parsedResumeRow.portfolio_url = parsedResume.portfolio_url || null;
+    parsedResumeRow.experience    = parsedResume.experience;
+    parsedResumeRow.projects      = parsedResume.projects;
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // POST /precheck — instant, FREE eligibility gate. Pure regex/arithmetic
 // against stored resume data: zero Claude calls, no DB writes, ~10ms. The
@@ -483,6 +530,21 @@ router.post('/analyze', verifyToken, aiLimiter, async (req, res) => {
                 });
             }
 
+            // A never-parsed resume has no experience[] durations, which
+            // silently blinds the deterministic years check below. Parse it
+            // FIRST — a one-time cost per resume; every later analysis (and
+            // the /precheck endpoint) reuses the stored result.
+            if (!parsedResumeRow.name) {
+                const parsedResume = await callClaude({
+                    label: 'resume-parse',
+                    model: MODELS.EXTRACTION,
+                    maxTokens: 2500,
+                    prompt: buildResumeParsePrompt(resumeRaw),
+                    schema: RESUME_PARSE_SCHEMA,
+                });
+                await persistResumeParse(user_id, resume_id, parsedResume, parsedResumeRow);
+            }
+
             const strictSupps = await fetchSupplements(user_id, resume_id);
             const det = deterministicPrecheck(
                 visaResult.rows[0].work_authorization_status,
@@ -537,13 +599,20 @@ router.post('/analyze', verifyToken, aiLimiter, async (req, res) => {
         if (existingJob.rows.length > 0) {
             const row = existingJob.rows[0];
             job_id = row.id;
-            jdData = {
-                location: row.location,
-                salary: row.salary,
-                experience_needed: row.experience_needed,
-                preferred_qualifications: asArray(row.preferred_qualifications),
-                must_have_qualifications: asArray(row.must_have_qualifications),
-            };
+            const storedMust = asArray(row.must_have_qualifications);
+            const storedPref = asArray(row.preferred_qualifications);
+            // Reuse stored quals only when they exist — a row whose quals were
+            // cleared (e.g. to purge a stale categorization) falls through to
+            // a fresh JD parse instead of resurrecting empty lists.
+            if (storedMust.length > 0 || storedPref.length > 0) {
+                jdData = {
+                    location: row.location,
+                    salary: row.salary,
+                    experience_needed: row.experience_needed,
+                    preferred_qualifications: storedPref,
+                    must_have_qualifications: storedMust,
+                };
+            }
             const existingKw = asArray(row.extracted_keywords);
             if (existingKw.length > 0) storedKeywords = existingKw;
         } else if (jd_meta) {
@@ -566,8 +635,9 @@ router.post('/analyze', verifyToken, aiLimiter, async (req, res) => {
 
         const kwTask = storedKeywords ? Promise.resolve(null) : callClaude({
             label: 'keywords',
-            model: MODELS.EXTRACTION,
+            model: MODELS.GENERATION,
             maxTokens: 4000,
+            temperature: 0,
             prompt: buildKeywordsPrompt(raw_text),
             schema: KEYWORDS_SCHEMA,
         });
@@ -608,6 +678,25 @@ router.post('/analyze', verifyToken, aiLimiter, async (req, res) => {
                 ]
             );
             job_id = jdInsert.rows[0].id;
+        } else if (jdResult) {
+            // The stored row's quals were blank and a fresh JD parse just ran —
+            // persist the refreshed fields so the row heals permanently.
+            // (NULLing quals + extracted_keywords on a job forces full
+            // re-extraction on its next analyze.)
+            await pool.query(
+                `UPDATE job_descriptions
+                 SET job_title = $1, company_name = $2, extracted_keywords = COALESCE(extracted_keywords, $3),
+                     location = $4, salary = $5, experience_needed = $6,
+                     preferred_qualifications = $7, must_have_qualifications = $8
+                 WHERE id = $9`,
+                [
+                    job_title, company_name, JSON.stringify(storedKeywords),
+                    jdData.location, jdData.salary || 'Not specified', jdData.experience_needed,
+                    JSON.stringify(jdData.preferred_qualifications),
+                    JSON.stringify(jdData.must_have_qualifications),
+                    job_id
+                ]
+            );
         } else {
             await pool.query(
                 `UPDATE job_descriptions
@@ -620,37 +709,7 @@ router.post('/analyze', verifyToken, aiLimiter, async (req, res) => {
 
         // ── Persist resume parse if it just ran ─────────────────────────────
         if (parseResult) {
-            const parsedResume = parseResult;
-            await pool.query(
-                `UPDATE resume_parsed_data
-                 SET name=$1, email=$2, phone=$3, summary=$4, skills=$5, experience=$6, education=$7, projects=$8,
-                     github_url=$9, linkedin_url=$10, portfolio_url=$11
-                 WHERE resume_id=$12 AND user_id=$13`,
-                [
-                    parsedResume.name, parsedResume.email, parsedResume.phone, parsedResume.summary,
-                    JSON.stringify(parsedResume.skills),
-                    JSON.stringify(parsedResume.experience),
-                    JSON.stringify(parsedResume.education),
-                    JSON.stringify(parsedResume.projects),
-                    parsedResume.github_url || null,
-                    parsedResume.linkedin_url || null,
-                    parsedResume.portfolio_url || null,
-                    resume_id, user_id
-                ]
-            );
-            for (const proj of (parsedResume.projects || [])) {
-                await pool.query(
-                    `INSERT INTO resume_projects (user_id, resume_id, project_name, github_url, live_url)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (resume_id, project_name) DO NOTHING`,
-                    [user_id, resume_id, proj.name, proj.github_url || null, proj.live_url || null]
-                );
-            }
-            parsedResumeRow.github_url    = parsedResume.github_url    || null;
-            parsedResumeRow.linkedin_url  = parsedResume.linkedin_url  || null;
-            parsedResumeRow.portfolio_url = parsedResume.portfolio_url || null;
-            parsedResumeRow.experience    = parsedResume.experience;
-            parsedResumeRow.projects      = parsedResume.projects;
+            await persistResumeParse(user_id, resume_id, parseResult, parsedResumeRow);
         }
 
         // ── Supplements + links (saved facts count toward the score) ───────
@@ -676,19 +735,22 @@ ON CONFLICT (resume_id, project_name) DO NOTHING`,
             .filter(m => m.category === 'must_have' || m.category === 'preferred')
             .slice(0, 25);
         const miningPromise = (async () => {
-            if (minableMissing.length === 0) return [];
+            if (minableMissing.length === 0) return { inferred: [], trainable: [] };
             const candidateMaterial = suppText ? `${resumeRaw}\n\nVERIFIED ADDITIONAL FACTS:\n${suppText}` : resumeRaw;
             try {
                 const mined = await callClaude({
                     label: 'evidence-mining',
-                    model: MODELS.EXTRACTION,
-                    maxTokens: 2000,
+                    model: MODELS.GENERATION,
+                    maxTokens: 2500,
+                    // 0 — the skills buckets shown to the user must not
+                    // shuffle between runs of the same job
+                    temperature: 0,
                     prompt: buildEvidenceMiningPrompt(minableMissing.map(m => m.term), candidateMaterial),
                     schema: EVIDENCE_SCHEMA,
                 });
                 const normMaterial = normalize(candidateMaterial);
                 const missingByTerm = new Map(minableMissing.map(m => [m.term, m]));
-                return (Array.isArray(mined.inferred) ? mined.inferred : [])
+                const inferred = (Array.isArray(mined.inferred) ? mined.inferred : [])
                     .filter(it =>
                         it && it.term && it.quote &&
                         missingByTerm.has(it.term) &&
@@ -699,10 +761,27 @@ ON CONFLICT (resume_id, project_name) DO NOTHING`,
                         category: missingByTerm.get(it.term).category,
                         quote: String(it.quote).trim().slice(0, 250),
                     }));
+                const inferredTerms = new Set(inferred.map(it => it.term));
+                // Trainable = same-kind similar skill the material verifiably
+                // names. Same anti-hallucination pattern as quotes: a
+                // similar_skill absent from the material is discarded.
+                const trainable = (Array.isArray(mined.trainable) ? mined.trainable : [])
+                    .filter(it =>
+                        it && it.term && it.similar_skill &&
+                        missingByTerm.has(it.term) &&
+                        !inferredTerms.has(it.term) &&
+                        normMaterial.includes(normalize(it.similar_skill))
+                    )
+                    .map(it => ({
+                        term: it.term,
+                        category: missingByTerm.get(it.term).category,
+                        similar_skill: String(it.similar_skill).trim().slice(0, 100),
+                    }));
+                return { inferred, trainable };
             } catch {
                 // Evidence mining is best-effort — a failure here must never
                 // block the analysis. The user just gets asked more questions.
-                return [];
+                return { inferred: [], trainable: [] };
             }
         })();
 
@@ -710,19 +789,66 @@ ON CONFLICT (resume_id, project_name) DO NOTHING`,
         //    Runs CONCURRENTLY with evidence mining above. ────────────────────
         const matchPromise = callClaude({
             label: 'holistic-match',
-            model: MODELS.EXTRACTION,
+            model: MODELS.GENERATION,
             maxTokens: 1500,
+            temperature: 0,
             prompt: buildMatchPrompt({
                 resumeRaw,
                 suppText,
                 jdRaw: raw_text,
                 mustHave: jdData.must_have_qualifications,
                 preferred: jdData.preferred_qualifications,
+                today: todayFullDate(),
             }),
             schema: MATCH_SCHEMA,
         });
 
-        const [inferred, matchResult] = await Promise.all([miningPromise, matchPromise]);
+        const [mining, matchResult] = await Promise.all([miningPromise, matchPromise]);
+        const { inferred, trainable } = mining;
+
+        // ── Skill-gap breakdown (display/decision aid ONLY — never feeds the
+        //    ATS score; coverage stays strict keyword matching, locked
+        //    decision 2). Buckets are disjoint, priority: proof > must-have
+        //    gap > trainable > not covered. Domain terms are context
+        //    vocabulary, not skills, and are excluded. ────────────────────────
+        const inferredTermSet = new Set(inferred.map(i => i.term));
+        const trainableTermSet = new Set(trainable.map(t => t.term));
+        // Degrees/education are requirements, not skills — the eligibility
+        // screen already judges them (it knows B.Tech = bachelor's; keyword
+        // matching does not). Keep them out of the skills buckets so the two
+        // sections can never contradict each other.
+        const isEducationTerm = (t) => /bachelor|master|degree|diploma|phd|doctorate|b\.?tech|m\.?tech/i.test(t);
+        const skills_breakdown = {
+            must_have_missing: coverage.missing
+                .filter(m => m.category === 'must_have' && !inferredTermSet.has(m.term) && !isEducationTerm(m.term))
+                .map(m => m.term),
+            proof_based: inferred,
+            trainable: trainable.filter(t => t.category === 'preferred'),
+            not_covered: coverage.missing
+                .filter(m => m.category === 'preferred' && !inferredTermSet.has(m.term) && !trainableTermSet.has(m.term) && !isEducationTerm(m.term))
+                .map(m => m.term),
+        };
+
+        // Must-have skills surface inside the eligibility checks list. This
+        // entry is informational — a keyword-level miss must not hard-block a
+        // job the way the strict gate does (synonym wording and B.Tech-style
+        // equivalents make keyword absence too brittle to be a verdict).
+        const mustHaveKwCount = keywords.filter(k => k.category === 'must_have' && !isEducationTerm(k.term)).length;
+        if (mustHaveKwCount > 0) {
+            const missingMust = skills_breakdown.must_have_missing;
+            eligibilityChecks = [
+                ...eligibilityChecks,
+                {
+                    name: 'must_have_skills',
+                    requirement: `${mustHaveKwCount} must-have skill${mustHaveKwCount === 1 ? '' : 's'} named in the JD`,
+                    candidate: `${mustHaveKwCount - missingMust.length} covered by your resume or direct evidence`,
+                    verdict: missingMust.length === 0 ? 'pass' : 'fail',
+                    reason: missingMust.length === 0
+                        ? 'Every must-have skill is covered by your resume or direct evidence.'
+                        : `Missing: ${missingMust.slice(0, 8).join(', ')}${missingMust.length > 8 ? ', …' : ''}.`,
+                },
+            ];
+        }
 
         // ── Persist baseline scores ─────────────────────────────────────────
         await pool.query(
@@ -771,8 +897,10 @@ ON CONFLICT (resume_id, project_name) DO NOTHING`,
                     missing_skills: matchResult.missing_skills,
                     gaps: matchResult.gaps
                 },
+                recommendation: recommendationFor(matchResult.match_score),
                 coverage,
                 inferred,
+                skills_breakdown,
                 resume_gaps,
                 checks: eligibilityChecks
             }
@@ -1031,6 +1159,7 @@ router.post('/finalize', verifyToken, aiLimiter, async (req, res) => {
                     jdRaw: jobRow.raw_text,
                     experienceTech,
                     projectTech,
+                    today: todayFullDate(),
                 }),
             });
         })();

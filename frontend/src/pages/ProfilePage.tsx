@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { FileText, Upload, X, CheckCircle2, Trash2, Circle } from 'lucide-react'
+import { FileText, Upload, X, CheckCircle2, Trash2, Circle, LogOut } from 'lucide-react'
 import { api } from '@/api/client'
-import { getUser } from '@/lib/auth'
+import { getUser, logout } from '@/lib/auth'
 import { useResumes, useResumeSummary } from '@/hooks/useResumes'
 
 interface UserProfile {
@@ -174,10 +174,18 @@ export function ProfilePage() {
             <div className="w-11 h-11 rounded-full bg-muted border border-border flex items-center justify-center text-[14px] font-semibold text-foreground flex-shrink-0">
               {displayName !== '—' ? initials(displayName) : '?'}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-[14px] font-semibold text-foreground truncate">{displayName}</p>
               <p className="text-[12px] text-muted-foreground truncate">{displayEmail}</p>
             </div>
+            <button
+              onClick={logout}
+              className="flex items-center gap-2 px-3.5 h-9 text-[13px] font-medium text-muted-foreground border border-border rounded-md hover:text-rose-400 hover:border-rose-900/60 hover:bg-rose-950/30 transition-colors flex-shrink-0"
+              title="Log out"
+            >
+              <LogOut size={13} strokeWidth={2} />
+              Log out
+            </button>
           </div>
         </div>
 

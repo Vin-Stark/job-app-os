@@ -3,11 +3,12 @@ const Anthropic = require('@anthropic-ai/sdk');
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // 🔒 Locked decision #1 — the ONLY place a Claude model ID may appear.
-// Tiered allocation:
-//   EXTRACTION — routine structured work: parsing, keyword extraction,
-//                classification, eligibility screening, evidence mining.
-//   GENERATION — user-facing documents where writing quality is the product:
-//                tailored resume, corrective pass, cover letter.
+// Tiered allocation (amended July 2026):
+//   EXTRACTION — routine structured work: parsing, classification,
+//                eligibility screening, job extraction from page scrapes.
+//   GENERATION — user-facing documents (tailored resume, corrective pass,
+//                cover letter) plus the score-bearing judgment calls:
+//                keyword extraction, evidence mining, holistic match.
 const MODELS = {
     EXTRACTION: 'claude-haiku-4-5-20251001',
     GENERATION: 'claude-sonnet-4-6',
@@ -20,7 +21,7 @@ const MODELS = {
 // - Every call logs token usage (spend observability) and fails loudly on
 //   truncation instead of letting a cut-off response poison JSON.parse or
 //   silently ship half a resume.
-async function callClaude({ label, model, maxTokens, prompt, schema }) {
+async function callClaude({ label, model, maxTokens, prompt, schema, temperature }) {
     const params = {
         model,
         max_tokens: maxTokens,
@@ -28,6 +29,11 @@ async function callClaude({ label, model, maxTokens, prompt, schema }) {
     };
     if (schema) {
         params.output_config = { format: { type: 'json_schema', schema } };
+    }
+    // Score-bearing calls pass 0 for run-to-run stability; generation calls
+    // omit it (API default) — sampling variety helps writing quality.
+    if (temperature !== undefined) {
+        params.temperature = temperature;
     }
 
     const message = await anthropic.messages.create(params);

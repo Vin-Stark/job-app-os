@@ -3,7 +3,8 @@ import { api, ApiError } from '../lib/api'
 import { isAuthed, getUser } from '../lib/auth'
 import type {
   Resume, ScrapedJob, AnalyzeResponse, FinalizeResponse, EligibilityCheck,
-  ExtractJobResponse, PrecheckResponse, JdMeta, TrackerApplication,
+  ExtractJobResponse, PrecheckResponse, JdMeta, TrackerApplication, Recommendation,
+  SkillsBreakdown,
 } from '../lib/types'
 import { resumePdfDataUrl } from '../lib/resumePdf'
 import { getDraft, setDraft, clearDraft, type DraftPhase } from '../lib/draftStore'
@@ -17,7 +18,24 @@ import {
 
 type Phase =
   | 'loading' | 'unauth' | 'ready'
-  | 'review' | 'prechecking' | 'extracting' | 'analyzing' | 'ineligible' | 'tailoring' | 'done'
+  | 'review' | 'prechecking' | 'extracting' | 'analyzing' | 'ineligible' | 'scored' | 'tailoring' | 'done'
+
+// Band colors for the Job Match headline (thresholds mirror the backend's
+// recommendation bands: ≥80 good, 60–79 borderline, <60 tailor first).
+const matchBandCls = (s: number | null) =>
+  s == null ? 'text-slate-200' : s >= 80 ? 'text-emerald-300' : s >= 60 ? 'text-amber-300' : 'text-rose-300'
+
+// Real skills (must-have + preferred) the resume lacks, must-haves first —
+// domain terms are context vocabulary, not skills, and are excluded. Capped
+// to keep drafts/history small; the count is what the UI leads with.
+const missingSkillTerms = (missing?: { term: string; category: string }[]) => {
+  if (!missing) return null
+  const skills = missing.filter(m => m.category !== 'domain')
+  return [
+    ...skills.filter(m => m.category === 'must_have'),
+    ...skills.filter(m => m.category !== 'must_have'),
+  ].map(m => m.term).slice(0, 40)
+}
 
 function sanitize(s: string) {
   return (s || 'resume').replace(/[^a-z0-9._-]+/gi, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'resume'
@@ -62,6 +80,12 @@ export function App() {
   const [checks, setChecks] = useState<EligibilityCheck[]>([])
   const [ineligibleMsg, setIneligibleMsg] = useState('')
   const [score, setScore] = useState<number | null>(null)
+  const [matchScore, setMatchScore] = useState<number | null>(null)
+  const [recommendation, setRecommendation] = useState<Recommendation | null>(null)
+  // Must-have + preferred JD keywords absent from the resume, must-haves first
+  const [missingSkills, setMissingSkills] = useState<string[] | null>(null)
+  // Categorized gap view (must-have / proof-based / trainable / not covered)
+  const [skills, setSkills] = useState<SkillsBreakdown | null>(null)
   const [jobId, setJobId] = useState<number | null>(null)
   const [tailoredText, setTailoredText] = useState('')
   const [pdfDataUrl, setPdfDataUrl] = useState('')
@@ -108,11 +132,17 @@ export function App() {
         }
         setChecks(draft.checks); setIneligibleMsg(draft.ineligibleMsg)
         setScore(draft.score); setJobId(draft.jobId); setTailoredText(draft.tailoredText)
+        setMatchScore(draft.matchScore); setRecommendation(draft.recommendation)
+        setMissingSkills(draft.missingSkills); setSkills(draft.skills)
         if (draft.phase === 'done' && draft.tailoredText) {
           try { setPdfDataUrl(resumePdfDataUrl(draft.tailoredText)) } catch { setPdfDataUrl('') }
         }
         setRestoredAt(draft.savedAt)
-        setPhase(draft.phase)
+        // A scored draft is only restorable when the decision screen can
+        // actually render and generate — otherwise fall back to review.
+        setPhase(draft.phase === 'scored' && (draft.jobId == null || draft.matchScore == null)
+          ? 'review'
+          : draft.phase)
       } else {
         if (draft && draft.userId === uid) void clearDraft()
         setPhase('ready')
@@ -133,11 +163,17 @@ export function App() {
   useEffect(() => {
     if (phase === 'loading' || phase === 'unauth' || phase === 'ready') return
     const persistPhase: DraftPhase =
-      phase === 'ineligible' ? 'ineligible' : phase === 'done' ? 'done' : 'review'
+      phase === 'ineligible' ? 'ineligible'
+        : phase === 'done' ? 'done'
+        // Tailoring is transient but all of scored's inputs are in state — a
+        // reopen mid-tailor lands back on the decision screen, not the form.
+        : (phase === 'scored' || phase === 'tailoring') && jobId != null && matchScore != null ? 'scored'
+        : 'review'
     const t = setTimeout(() => {
       const draft = {
         userId, phase: persistPhase, title, company, jd, source, scrapeDebug,
         jdMeta, resumeId, checks, ineligibleMsg, score, jobId, tailoredText,
+        matchScore, recommendation, missingSkills, skills,
       }
       // A blank review form (failed capture, or the user cleared everything)
       // isn't worth keeping — remove any stored draft instead of saving it.
@@ -146,7 +182,8 @@ export function App() {
     }, 300)
     return () => clearTimeout(t)
   }, [phase, userId, title, company, jd, source, scrapeDebug, jdMeta, resumeId,
-    checks, ineligibleMsg, score, jobId, tailoredText])
+    checks, ineligibleMsg, score, jobId, tailoredText,
+    matchScore, recommendation, missingSkills, skills])
 
   // Non-blocking tracker lookup: warn if this job already has an application.
   const checkDuplicate = async (jobTitle: string, companyName: string) => {
@@ -178,6 +215,7 @@ export function App() {
     setRestoredAt(null)
     setDupWarning(null)
     setChecks([]); setIneligibleMsg(''); setScore(null)
+    setMatchScore(null); setRecommendation(null); setMissingSkills(null); setSkills(null)
     setJobId(null); setTailoredText(''); setPdfDataUrl('')
     try {
       const job = await scrapeCurrentTab()
@@ -303,7 +341,7 @@ export function App() {
     else setError('No text is highlighted on the page.')
   }
 
-  // ── Analyze (strict) → Finalize ────────────────────────────────────────────
+  // ── Analyze (strict) → scored review → Finalize on explicit click ─────────
   const run = async () => {
     setError(null)
     if (!resumeId) { setError('Pick a resume first.'); return }
@@ -338,19 +376,33 @@ export function App() {
 
     setChecks(analyze.data.checks || [])
     setScore(analyze.data.coverage?.score ?? null)
+    setMatchScore(Math.round(analyze.data.match?.match_score ?? 0))
+    setRecommendation(analyze.data.recommendation ?? null)
+    setMissingSkills(missingSkillTerms(analyze.data.coverage?.missing))
+    setSkills(analyze.data.skills_breakdown ?? null)
     setJobId(analyze.data.job_id)
+    // Stop here — show the match score and recommendation. Tailoring (and the
+    // tracker entry it creates) only happens on the user's explicit click.
+    setPhase('scored')
+  }
 
+  const generate = async () => {
+    if (!resumeId || jobId == null) return
+    setError(null)
     setPhase('tailoring')
     try {
       const fin = await api.post<FinalizeResponse>('/api/generate/finalize', {
         resume_id: resumeId,
-        job_id: analyze.data.job_id,
+        job_id: jobId,
         generate_cover_letter: false,
       })
       const text = fin.data.tailored_resume || ''
       const finalScore = fin.data.coverage?.score ?? score
+      // Skills the tailor could NOT truthfully cover — the honest remaining gaps
+      const finalMissing = missingSkillTerms(fin.data.coverage?.missing) ?? missingSkills
       setTailoredText(text)
       setScore(finalScore)
+      setMissingSkills(finalMissing)
       // Build the PDF once, up front, so preview + drag are instant.
       try {
         setPdfDataUrl(resumePdfDataUrl(text))
@@ -360,15 +412,16 @@ export function App() {
       // Record under "Recent" so the PDF can be reopened later without
       // regenerating (no AI credits).
       void addHistoryEntry({
-        userId, jobId: analyze.data.job_id,
+        userId, jobId,
         title: title.trim(), company: company.trim(),
-        score: finalScore, tailoredText: text,
-        checks: analyze.data.checks || [],
+        score: finalScore, matchScore, missingSkills: finalMissing, tailoredText: text,
+        checks,
       }).then(() => getHistory(userId).then(setHistory)).catch(() => {})
       setPhase('done')
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Tailoring failed. Your job was analyzed — try again.')
-      setPhase('review')
+      // Analysis is already paid for and saved — retry from the scored screen.
+      setError(e instanceof ApiError ? e.message : 'Tailoring failed. Your analysis is saved — try again.')
+      setPhase('scored')
     }
   }
 
@@ -396,6 +449,7 @@ export function App() {
     void clearDraft()
     setPhase('ready'); setError(null); setChecks([]); setIneligibleMsg('')
     setPdfDataUrl(''); setScore(null); setDragMsg(null); setJdMeta(null)
+    setMatchScore(null); setRecommendation(null); setMissingSkills(null); setSkills(null)
     setTitle(''); setCompany(''); setJd(''); setSource(null); setScrapeDebug('')
     setJobId(null); setTailoredText(''); setRestoredAt(null); setDupWarning(null)
   }
@@ -406,6 +460,8 @@ export function App() {
     setError(null); setDragMsg(null); setDupWarning(null)
     setTitle(e.title); setCompany(e.company)
     setChecks(e.checks || []); setScore(e.score)
+    setMatchScore(e.matchScore ?? null); setRecommendation(null)
+    setMissingSkills(e.missingSkills ?? null)
     setJobId(e.jobId); setTailoredText(e.tailoredText)
     try { setPdfDataUrl(resumePdfDataUrl(e.tailoredText)) } catch { setPdfDataUrl('') }
     setRestoredAt(e.savedAt)
@@ -514,7 +570,7 @@ export function App() {
             {cleaning ? 'Cleaning…' : '✨ Clean up with AI (extract role · company · JD)'}
           </button>
           <button onClick={run} className="w-full h-10 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-semibold">
-            Check eligibility & tailor
+            Check eligibility & match
           </button>
           <button onClick={reset} className="w-full h-8 text-[12px] text-slate-400 hover:text-slate-200">Cancel</button>
         </div>
@@ -522,8 +578,40 @@ export function App() {
 
       {phase === 'prechecking' && <Busy label="Instant eligibility check — no AI…" />}
       {phase === 'extracting' && <Busy label="Cleaning up the capture with AI…" />}
-      {phase === 'analyzing' && <Busy label="Checking eligibility…" />}
-      {phase === 'tailoring' && <Busy label="Eligible — tailoring your resume…" />}
+      {phase === 'analyzing' && <Busy label="Checking eligibility & scoring the match…" />}
+      {phase === 'tailoring' && <Busy label="Tailoring your resume…" />}
+
+      {phase === 'scored' && (
+        <div className="space-y-3">
+          <div className="rounded-md border border-slate-800 bg-slate-900/60 px-3 py-3">
+            <div className="flex items-baseline justify-between">
+              <span className="text-[11px] uppercase tracking-wide text-slate-500">Job match</span>
+              <span className={`text-[22px] font-bold ${matchBandCls(matchScore)}`}>{matchScore}%</span>
+            </div>
+            {recommendation && (
+              <p className="mt-1.5 text-[12px] leading-relaxed text-slate-300">
+                <b className="text-slate-200">Interview chances: {recommendation.interview_chances}.</b>{' '}
+                {recommendation.advice}
+              </p>
+            )}
+          </div>
+          <SkillGaps skills={skills} />
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            Job match = AI judgment of how well your background fits this role.
+            Skill gaps are split by what they mean: proof-based ones are already
+            evidenced in your resume, trainable ones have a same-kind tool you
+            know — only real gaps stay gaps. Tailoring never invents skills.
+          </p>
+          <ChecksList checks={checks} />
+          <button onClick={generate} className="w-full h-10 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-semibold">
+            Generate tailored resume
+          </button>
+          <p className="text-[11px] text-slate-500 text-center">
+            Not in your tracker yet — generating adds it.
+          </p>
+          <button onClick={reset} className="w-full h-8 text-[12px] text-slate-400 hover:text-slate-200">Start over</button>
+        </div>
+      )}
 
       {phase === 'ineligible' && (
         <div className="space-y-3">
@@ -545,9 +633,14 @@ export function App() {
             <span className="rounded-full bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 px-2.5 py-1 text-[12px] font-semibold">
               Eligible · logged to tracker
             </span>
-            {score != null && (
+            {matchScore != null && (
               <span className="rounded-full bg-slate-800 text-slate-200 px-2.5 py-1 text-[12px] font-semibold">
-                ATS {score}%
+                Match {matchScore}%
+              </span>
+            )}
+            {missingSkills != null && (
+              <span className="rounded-full bg-slate-800 text-slate-200 px-2.5 py-1 text-[12px] font-semibold">
+                {missingSkills.length} missing
               </span>
             )}
           </div>
@@ -621,6 +714,68 @@ function ResumePicker({ resumes, value, onChange }: { resumes: Resume[]; value: 
         {resumes.map(r => <option key={r.id} value={r.id}>{r.filename}</option>)}
       </select>
     </Field>
+  )
+}
+
+// Categorized skill-gap view for the scored screen. Rendered only when the
+// JD isn't a 100% keyword match; buckets come pre-validated from the backend.
+function SkillGaps({ skills }: { skills: SkillsBreakdown | null }) {
+  if (!skills) return null
+  const gapTotal = skills.must_have_missing.length + skills.proof_based.length
+    + skills.trainable.length + skills.not_covered.length
+  if (gapTotal === 0) {
+    return (
+      <p className="rounded-md border border-emerald-800/60 bg-emerald-950/40 px-3 py-2 text-[12px] text-emerald-300">
+        ✓ Your resume covers every skill named in this JD.
+      </p>
+    )
+  }
+  const terms = (list: string[], cap = 6) =>
+    list.slice(0, cap).join(' · ') + (list.length > cap ? ' · …' : '')
+  return (
+    <div className="rounded-md border border-slate-800 px-3 py-2.5 space-y-2.5">
+      {skills.must_have_missing.length > 0 ? (
+        <div>
+          <div className="flex items-center justify-between text-[12px]">
+            <span className="font-semibold text-rose-300">Must-have skills missing</span>
+            <span className="font-semibold text-rose-300">{skills.must_have_missing.length}</span>
+          </div>
+          <p className="mt-0.5 text-[11px] text-slate-400 leading-relaxed">{terms(skills.must_have_missing)}</p>
+        </div>
+      ) : (
+        <p className="text-[12px] text-emerald-300">✓ All must-have skills covered</p>
+      )}
+      {skills.proof_based.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between text-[12px]">
+            <span className="font-semibold text-emerald-300">Proof-based — you've done this work</span>
+            <span className="font-semibold text-emerald-300">{skills.proof_based.length}</span>
+          </div>
+          <p className="mt-0.5 text-[11px] text-slate-400 leading-relaxed">{terms(skills.proof_based.map(p => p.term))}</p>
+        </div>
+      )}
+      {skills.trainable.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between text-[12px]">
+            <span className="font-semibold text-amber-300">Trainable — you know something similar</span>
+            <span className="font-semibold text-amber-300">{skills.trainable.length}</span>
+          </div>
+          <p className="mt-0.5 text-[11px] text-slate-400 leading-relaxed">
+            {skills.trainable.slice(0, 4).map(t => `${t.term} (knows ${t.similar_skill})`).join(' · ')}
+            {skills.trainable.length > 4 ? ' · …' : ''}
+          </p>
+        </div>
+      )}
+      {skills.not_covered.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between text-[12px]">
+            <span className="text-slate-400">Not covered</span>
+            <span className="text-slate-400">{skills.not_covered.length}</span>
+          </div>
+          <p className="mt-0.5 text-[11px] text-slate-500 leading-relaxed">{terms(skills.not_covered)}</p>
+        </div>
+      )}
+    </div>
   )
 }
 

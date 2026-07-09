@@ -24,6 +24,20 @@ function scoreChipCls(score: number) {
   return 'bg-rose-950/60 border-rose-800/60'
 }
 
+// Job Match bands mirror the backend's recommendation table:
+// ≥80 good, 60–79 borderline, <60 tailor first.
+function matchColor(score: number) {
+  if (score >= 80) return 'text-emerald-300'
+  if (score >= 60) return 'text-amber-300'
+  return 'text-rose-300'
+}
+
+function matchChipCls(score: number) {
+  if (score >= 80) return 'bg-emerald-950/60 border-emerald-800/60'
+  if (score >= 60) return 'bg-amber-950/60 border-amber-800/60'
+  return 'bg-rose-950/60 border-rose-800/60'
+}
+
 // One missing keyword row with an expandable evidence input
 function MissingKeywordRow({
   kw, value, onChange,
@@ -200,9 +214,20 @@ export function FitReport({ analysis, resumeId, generating, onGenerate }: Props)
             Fit Report — {analysis.job.job_title} @ {analysis.job.company_name}
           </p>
           <div className="flex items-stretch gap-3">
+            <div className={`flex-1 rounded-lg border p-4 ${matchChipCls(match.match_score)}`}>
+              <p className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground font-medium mb-1" style={MONO}>
+                Job Match
+              </p>
+              <p className={`text-[28px] font-bold leading-none ${matchColor(match.match_score)}`} style={{ fontFamily: 'var(--font-stat)' }}>
+                {match.match_score}%
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-1.5" style={MONO}>
+                recruiter-style AI judgment
+              </p>
+            </div>
             <div className={`flex-1 rounded-lg border p-4 ${scoreChipCls(coverage.score)}`}>
               <p className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground font-medium mb-1" style={MONO}>
-                ATS Keyword Coverage
+                Keyword Coverage (ATS)
               </p>
               <p className={`text-[28px] font-bold leading-none ${scoreColor(coverage.score)}`} style={{ fontFamily: 'var(--font-stat)' }}>
                 {coverage.score}%
@@ -211,20 +236,18 @@ export function FitReport({ analysis, resumeId, generating, onGenerate }: Props)
                 {coverage.matched_count}/{coverage.total_count} keywords · target 70%+
               </p>
             </div>
-            <div className="flex-1 rounded-lg border border-blue-800/60 bg-blue-950/60 p-4">
-              <p className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground font-medium mb-1" style={MONO}>
-                Holistic Fit
-              </p>
-              <p className="text-[28px] font-bold leading-none text-blue-300" style={{ fontFamily: 'var(--font-stat)' }}>
-                {match.match_score}%
-              </p>
-              <p className="text-[10px] text-muted-foreground mt-1.5" style={MONO}>
-                recruiter-style judgment
+          </div>
+          {analysis.recommendation && (
+            <div className="mt-3 rounded-md border border-border bg-muted/20 px-3 py-2.5">
+              <p className="text-[12px] text-foreground leading-relaxed">
+                <b>Interview chances: {analysis.recommendation.interview_chances}.</b>{' '}
+                <span className="text-muted-foreground">{analysis.recommendation.advice}</span>
               </p>
             </div>
-          </div>
+          )}
           <p className="text-[11px] text-muted-foreground leading-relaxed mt-3">
-            Scored by strict keyword matching in code, weighted the way the JD weights them: must-haves ×2,
+            Job Match is the AI's judgment of how well your background fits the role. Keyword Coverage is
+            scored by strict keyword matching in code, weighted the way the JD weights them: must-haves ×2,
             nice-to-haves ×1, context terms ×0.5. We already searched your resume for evidence — only the
             leftovers below need your input, and anything you skip stays an honest gap.
           </p>
@@ -323,6 +346,28 @@ export function FitReport({ analysis, resumeId, generating, onGenerate }: Props)
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Trainable skills (same-kind tool known — display only) ── */}
+        {(analysis.skills_breakdown?.trainable?.length ?? 0) > 0 && (
+          <div className="space-y-2">
+            <p className="text-[9px] uppercase tracking-[0.12em] text-amber-400/80 font-medium" style={MONO}>
+              Trainable — you know a similar tool ({analysis.skills_breakdown.trainable.length})
+            </p>
+            <p className="text-[10px] text-muted-foreground/70 -mt-1">
+              The JD names a tool you haven't used, but your resume shows the same kind of tool.
+              Worth mentioning in interviews — never added to your resume automatically.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {analysis.skills_breakdown.trainable.map(t => (
+                <span key={t.term}
+                  className="text-[10px] bg-amber-950/40 border border-amber-800/40 text-amber-200 px-2 py-0.5 rounded"
+                  style={MONO}>
+                  {t.term} <span className="text-muted-foreground">(knows {t.similar_skill})</span>
+                </span>
+              ))}
+            </div>
           </div>
         )}
 

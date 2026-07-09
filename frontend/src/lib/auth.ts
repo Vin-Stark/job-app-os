@@ -2,6 +2,14 @@ export const setToken = (token: string) => localStorage.setItem('token', token)
 export const getToken = () => localStorage.getItem('token')
 export const clearToken = () => localStorage.removeItem('token')
 
+// Drops the token and returns to the login screen. Hard nav (not router
+// navigate) so all in-memory state and the React Query cache are discarded —
+// no stale user data survives the switch. Mirrors the 401 path in api/client.ts.
+export const logout = () => {
+  clearToken()
+  window.location.href = '/login'
+}
+
 export interface AuthUser {
   id: number
   name: string

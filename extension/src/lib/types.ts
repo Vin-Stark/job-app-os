@@ -72,6 +72,29 @@ export interface AnalyzeIneligible {
   message: string
 }
 
+// Code-computed interview-chances band for a match_score — text comes from the
+// backend (utils/matchBands.js) so extension and web app always say the same thing.
+export interface Recommendation {
+  band: string
+  interview_chances: string
+  advice: string
+}
+
+// Skill gaps split by what they mean for the application, computed server-side
+// (evidence-verified — never fed into the ATS score):
+//   must_have_missing — hard JD skills absent from the resume (shown with the
+//     eligibility checks)
+//   proof_based — JD skills the resume evidences under different wording;
+//     apply with confidence
+//   trainable — JD tools where the resume names a similar tool of the same kind
+//   not_covered — honest gaps: none of the above
+export interface SkillsBreakdown {
+  must_have_missing: string[]
+  proof_based: { term: string; category: string; quote: string }[]
+  trainable: { term: string; category: string; similar_skill: string }[]
+  not_covered: string[]
+}
+
 export interface AnalyzeEligible {
   success: true
   eligible: true
@@ -79,7 +102,9 @@ export interface AnalyzeEligible {
     job_id: number
     job: { company_name: string; job_title: string; location: string }
     match: { match_score: number; missing_skills: string[] }
+    recommendation: Recommendation
     coverage: Coverage
+    skills_breakdown: SkillsBreakdown
     checks: EligibilityCheck[]
   }
 }

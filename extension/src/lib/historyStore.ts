@@ -13,7 +13,14 @@ export interface HistoryEntry {
   jobId: number | null
   title: string
   company: string
+  // Post-tailor keyword coverage % (deterministic ATS score)
   score: number | null
+  // Holistic job-match % — optional: entries saved before it existed lack it,
+  // so every reader must guard
+  matchScore?: number | null
+  // JD skills still missing after tailoring (must-have + preferred terms) —
+  // optional for the same reason
+  missingSkills?: string[] | null
   tailoredText: string
   checks: EligibilityCheck[]
 }
