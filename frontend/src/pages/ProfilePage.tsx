@@ -142,7 +142,7 @@ export function ProfilePage() {
           {/* Progress bar */}
           <div className="w-full h-1 bg-muted rounded-full mb-3 overflow-hidden">
             <div
-              className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+              className="h-full bg-emerald-400 rounded-full transition-all duration-500"
               style={{ width: `${(completedCount / steps.length) * 100}%` }}
             />
           </div>
@@ -240,7 +240,7 @@ export function ProfilePage() {
                   ? 'border-foreground/40 bg-muted/60'
                   : uploadResume.isPending
                   ? 'border-border bg-muted/20 cursor-not-allowed opacity-50'
-                  : 'border-border hover:border-foreground/25 hover:bg-muted/30'
+                  : 'border-border hover:border-[#C6FF34]/30 hover:bg-muted/30'
               }`}
             >
               <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
@@ -377,7 +377,8 @@ export function ProfilePage() {
               <button
                 onClick={() => saveWorkAuth.mutate(workAuth)}
                 disabled={!workAuth || !workAuthDirty || saveWorkAuth.isPending}
-                className="flex items-center gap-2 px-5 h-9 bg-foreground text-background text-[13px] font-medium rounded-md hover:opacity-85 disabled:opacity-35 disabled:cursor-not-allowed transition-opacity"
+                className="flex items-center gap-2 px-5 h-9 text-[13px] font-medium rounded-full hover:opacity-85 disabled:opacity-35 disabled:cursor-not-allowed transition-opacity"
+                style={{ background: 'var(--lime)', color: 'var(--lime-foreground)' }}
               >
                 {saveWorkAuth.isPending ? 'Saving…' : 'Save'}
               </button>

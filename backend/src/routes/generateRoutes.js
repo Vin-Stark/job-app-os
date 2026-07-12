@@ -415,12 +415,16 @@ async function persistResumeParse(user_id, resume_id, parsedResume, parsedResume
             resume_id, user_id
         ]
     );
-    for (const proj of (parsedResume.projects || [])) {
+    const projects = parsedResume.projects || [];
+    if (projects.length > 0) {
         await pool.query(
             `INSERT INTO resume_projects (user_id, resume_id, project_name, github_url, live_url)
-VALUES ($1, $2, $3, $4, $5)
+SELECT $1, $2, UNNEST($3::text[]), UNNEST($4::text[]), UNNEST($5::text[])
 ON CONFLICT (resume_id, project_name) DO NOTHING`,
-            [user_id, resume_id, proj.name, proj.github_url || null, proj.live_url || null]
+            [user_id, resume_id,
+             projects.map(p => p.name),
+             projects.map(p => p.github_url || null),
+             projects.map(p => p.live_url   || null)]
         );
     }
     parsedResumeRow.name          = parsedResume.name;
@@ -1018,15 +1022,22 @@ router.post('/finalize', verifyToken, aiLimiter, async (req, res) => {
         // ── Save new gap evidence. The unique index on (resume_id,
         //    md5(content)) makes ON CONFLICT the dedupe — one query per
         //    supplement instead of SELECT-then-INSERT. ──────────────────────
-        for (const supp of newSupplements) {
-            const content = (supp && supp.content ? String(supp.content) : '').trim();
-            if (!content) continue;
-            const keyword = supp.keyword ? String(supp.keyword).trim().slice(0, 200) : null;
+        const suppRows = newSupplements
+            .map(supp => ({
+                kind:    supp.kind || 'evidence',
+                keyword: supp.keyword ? String(supp.keyword).trim().slice(0, 200) : null,
+                content: (supp && supp.content ? String(supp.content) : '').trim(),
+            }))
+            .filter(r => r.content.length > 0);
+        if (suppRows.length > 0) {
             await pool.query(
                 `INSERT INTO resume_supplements (user_id, resume_id, kind, keyword, content)
-                 VALUES ($1, $2, $3, $4, $5)
+                 SELECT $1, $2, UNNEST($3::text[]), UNNEST($4::text[]), UNNEST($5::text[])
                  ON CONFLICT (resume_id, md5(content)) DO NOTHING`,
-                [user_id, resume_id, supp.kind || 'evidence', keyword, content.slice(0, 2000)]
+                [user_id, resume_id,
+                 suppRows.map(r => r.kind),
+                 suppRows.map(r => r.keyword),
+                 suppRows.map(r => r.content.slice(0, 2000))]
             );
         }
 

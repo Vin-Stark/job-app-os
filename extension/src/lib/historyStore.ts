@@ -38,7 +38,7 @@ export async function getHistory(userId: number | null): Promise<HistoryEntry[]>
 export async function addHistoryEntry(e: Omit<HistoryEntry, 'savedAt'>): Promise<void> {
   const entry: HistoryEntry = { ...e, savedAt: Date.now() }
   const rest = (await readAll()).filter(
-    x => !(x.userId === entry.userId && x.jobId != null && x.jobId === entry.jobId)
+    x => !(x.userId === entry.userId && x.jobId === entry.jobId)
   )
   await chrome.storage.local.set({ [HISTORY_KEY]: [entry, ...rest].slice(0, MAX_ENTRIES) })
 }

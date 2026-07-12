@@ -27,7 +27,7 @@ router.post('/register', authLimiter, async (req, res) => {
             return res.status(400).json({ error: "Name must be 1–100 characters" });
         }
 
-        const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+        const result = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
         if (result.rows.length > 0) {
             return res.status(400).json({ error: "User already exists" });
         }
@@ -53,7 +53,7 @@ router.post('/login', authLimiter, async (req, res) => {
         if (!email || !password) {
             return res.status(400).json({ error: "All fields are required" });
         }
-        const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+        const result = await pool.query('SELECT id, name, email, password FROM users WHERE email = $1', [email]);
         if (result.rows.length === 0) {
             return res.status(401).json({ error: "Invalid credentials" });
         }

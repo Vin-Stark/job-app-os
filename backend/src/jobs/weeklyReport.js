@@ -32,7 +32,11 @@ FROM job_applications ja
 LEFT JOIN users u ON u.id = ja.user_id
 LEFT JOIN job_descriptions jd ON jd.id = ja.job_id
 WHERE ja.created_at >= NOW() - INTERVAL '7 days'
+LIMIT 500
     `);
+    if (result.rows.length === 500) {
+        console.error('[weeklyReport] result hit 500-row cap — some users may be missing from this report');
+    }
     const groupedByUser = result.rows.reduce((acc, row) => {
         if (!acc[row.email]) {
             acc[row.email] = [];
@@ -55,6 +59,7 @@ WHERE ja.created_at >= NOW() - INTERVAL '7 days'
     </tr>
 `).join('');
 
+        try {
         // Send the email
         await transporter.sendMail({
             from: `"Job App OS" <${process.env.EMAIL_USER}>`,
@@ -123,6 +128,9 @@ WHERE ja.created_at >= NOW() - INTERVAL '7 days'
             </table>
         `
         });
+        } catch (err) {
+            console.error(`[weeklyReport] failed to send to ${email}:`, err);
+        }
     }
 };
 

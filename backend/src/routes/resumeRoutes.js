@@ -32,33 +32,48 @@ const uploadResume = (req, res, next) => {
 };
 
 router.post('/upload', verifyToken, uploadResume, async (req, res) => {
+    let s3Key = null;
     try {
         if (!req.file) {
             return res.status(400).json({ error: 'No file uploaded' });
         }
         const file = req.file;
+
+        // Extract text FIRST — if the PDF is corrupt or encrypted this throws before
+        // anything is written to S3 or the DB, leaving nothing to clean up.
+        const pdfData = await pdfParse(Buffer.from(file.buffer));
+        const rawText = pdfData.text;
+
         // Sanitize the client-supplied filename before it touches the S3 key
         const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100);
-        const s3Key = `resumes/${req.user.user.id}-${Date.now()}-${safeName}`;
+        s3Key = `resumes/${req.user.user.id}-${Date.now()}-${safeName}`;
 
-        const command = new PutObjectCommand({
+        await aws.send(new PutObjectCommand({
             Bucket: process.env.AWS_BUCKET_NAME,
             Key: s3Key,
             Body: file.buffer,
             ContentType: file.mimetype
-        });
+        }));
 
-        await aws.send(command);
         const s3Url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
-        const resumeResult = await pool.query('INSERT INTO resumes (user_id, s3_key, filename, s3_url, file_size) VALUES($1, $2, $3, $4, $5) RETURNING id', [req.user.user.id, s3Key, file.originalname, s3Url, file.size]);
+        const resumeResult = await pool.query(
+            'INSERT INTO resumes (user_id, s3_key, filename, s3_url, file_size) VALUES($1, $2, $3, $4, $5) RETURNING id',
+            [req.user.user.id, s3Key, file.originalname, s3Url, file.size]
+        );
         const resumeId = resumeResult.rows[0].id;
-        const pdfData = await pdfParse(Buffer.from(file.buffer));
-        const rawText = pdfData.text
-        await pool.query('INSERT INTO resume_parsed_data (user_id, resume_id, raw_text) VALUES($1, $2, $3)', [req.user.user.id, resumeId, rawText]);
+        await pool.query(
+            'INSERT INTO resume_parsed_data (user_id, resume_id, raw_text) VALUES($1, $2, $3)',
+            [req.user.user.id, resumeId, rawText]
+        );
         res.status(201).json({ success: true, message: "Resume uploaded and text extracted successfully", resumeId });
     } catch (err) {
+        // S3 upload succeeded but a DB write failed — remove the orphaned S3 object.
+        if (s3Key) {
+            aws.send(new DeleteObjectCommand({ Bucket: process.env.AWS_BUCKET_NAME, Key: s3Key }))
+                .catch(e => console.error('[resumeRoutes] S3 cleanup failed after upload error:', e));
+        }
         console.error(err);
-        res.status(500).json({ error: 'Resume upload failed. Please try again.', message: "ResumeRoutes" });
+        res.status(500).json({ error: 'Resume upload failed. Please try again.', message: 'ResumeRoutes' });
     }
 });
 
@@ -80,16 +95,26 @@ router.delete("/delete/:id", verifyToken, async (req, res) => {
         if (resume.rows.length === 0) {
             return res.status(404).json({ error: "Resume not found" });
         }
-        const command = new DeleteObjectCommand({
+        const { s3_key } = resume.rows[0];
+
+        // Delete child rows first so FK constraints don't block the parent delete,
+        // and so the DB state is always consistent before we touch S3.
+        await pool.query("DELETE FROM resume_supplements WHERE resume_id = $1 AND user_id = $2", [id, user_id]);
+        await pool.query("DELETE FROM resume_projects    WHERE resume_id = $1 AND user_id = $2", [id, user_id]);
+        await pool.query("DELETE FROM resume_job_matches WHERE resume_id = $1 AND user_id = $2", [id, user_id]);
+        await pool.query("DELETE FROM resume_parsed_data WHERE resume_id = $1 AND user_id = $2", [id, user_id]);
+        await pool.query("DELETE FROM resumes            WHERE id = $1        AND user_id = $2", [id, user_id]);
+
+        // S3 delete AFTER all DB commits — a failed DB delete can be retried;
+        // a deleted S3 object cannot be recovered.
+        await aws.send(new DeleteObjectCommand({
             Bucket: process.env.AWS_BUCKET_NAME,
-            Key: resume.rows[0].s3_key
-        });
-        await aws.send(command);
-        await pool.query("DELETE FROM resumes WHERE id = $1 AND user_id = $2", [id, user_id]);
+            Key: s3_key
+        }));
         res.json({ success: true, message: "Resume deleted successfully" });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Failed to delete resume.', message: "ResumeRoutes" });
+        res.status(500).json({ error: 'Failed to delete resume.', message: 'ResumeRoutes' });
     }
 });
 

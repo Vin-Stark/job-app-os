@@ -15,7 +15,6 @@ export interface Application {
   company_name: string | null
   job_title: string | null
   location: string | null
-  salary: string | null
 }
 
 const QUERY_KEY = ['applications'] as const

@@ -14,13 +14,20 @@ import { STATUS_CONFIG as REAL_STATUS_CONFIG } from "@/lib/statusConfig";
 import { getUser } from "@/lib/auth";
 
 import {
-  LayoutDashboard, Briefcase, Sparkles, Plus, Bell,
+  LayoutDashboard, Briefcase, Sparkles, Plus,
   Target, UserCircle,
 } from "lucide-react";
 
 const queryClient = new QueryClient()
 
 type View = "dashboard" | "applications" | "generate" | "profile";
+
+function weekLabel(date: Date): string {
+  const day = date.getDay()
+  const mon = new Date(date)
+  mon.setDate(date.getDate() - (day === 0 ? 6 : day - 1))
+  return mon.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+}
 
 
 
@@ -63,11 +70,11 @@ function AppShell() {
         {/* Brand */}
         <div className="px-5 h-14 flex items-center border-b border-border flex-shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 bg-foreground rounded-md flex items-center justify-center">
-              <Target size={14} className="text-background" strokeWidth={2} />
+            <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: 'var(--lime)' }}>
+              <Target size={14} strokeWidth={2} style={{ color: 'var(--lime-foreground)' }} />
             </div>
             <span className="text-[15px] font-semibold text-foreground tracking-tight" style={{ fontFamily: "var(--font-display)" }}>
-              Tailr
+              tailr
             </span>
           </div>
         </div>
@@ -80,7 +87,7 @@ function AppShell() {
           {([
             { id: "dashboard" as View, label: "Dashboard", icon: LayoutDashboard },
             { id: "applications" as View, label: "Applications", icon: Briefcase },
-            { id: "generate" as View, label: "Generate Docs", icon: Sparkles },
+            { id: "generate" as View, label: "Generate Docs", icon: Sparkles },  // matches topbar label
             { id: "profile" as View, label: "Profile", icon: UserCircle },
           ] as const).map(({ id, label, icon: Icon }) => (
             <button
@@ -143,23 +150,21 @@ function AppShell() {
             <h1 className="text-[15px] font-semibold text-foreground leading-tight" style={{ fontFamily: "var(--font-display)" }}>
               {view === "dashboard" && "Overview"}
               {view === "applications" && "Applications"}
-              {view === "generate" && "Generate Documents"}
+              {view === "generate" && "Generate Docs"}
               {view === "profile" && "Profile"}
             </h1>
-            <p className="text-[10px] text-muted-foreground mt-0" style={{ fontFamily: "var(--font-mono)" }}>
-              {view === "dashboard" && "Week of June 17, 2026"}
+            <p className="text-[11px] text-muted-foreground mt-0" style={{ fontFamily: "var(--font-mono)" }}>
+              {view === "dashboard" && `Week of ${weekLabel(new Date())}`}
               {view === "applications" && `${appList.length} tracked position${appList.length !== 1 ? 's' : ''}`}
               {view === "generate" && "Paste a JD to generate tailored docs"}
               {view === "profile" && "Resume & work authorization settings"}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
-              <Bell size={14} strokeWidth={1.75} />
-            </button>
-<button
+            <button
               onClick={() => setView("generate")}
-              className="flex items-center gap-1.5 px-3 h-8 bg-foreground text-background text-[12px] font-medium rounded-md hover:opacity-85 transition-opacity"
+              className="flex items-center gap-1.5 px-3 h-8 text-[12px] font-medium rounded-full hover:opacity-85 transition-opacity"
+              style={{ background: 'var(--lime)', color: 'var(--lime-foreground)' }}
             >
               <Plus size={13} strokeWidth={2} />
               Add Job
@@ -168,10 +173,10 @@ function AppShell() {
         </header>
 
         {/* Views */}
-        <div className="flex-1 overflow-auto">
-          {view === "dashboard" && <DashboardPage onNavigate={setView} />}
-          {view === "applications" && <ApplicationsPage onNavigate={setView} />}
-          {view === "generate" && <GeneratePage onNavigate={setView} />}
+        <div className={`flex-1 ${view === "generate" ? "overflow-hidden flex flex-col" : "overflow-auto"}`}>
+          {view === "dashboard" && <DashboardPage onNavigate={(v) => setView(v as View)} />}
+          {view === "applications" && <ApplicationsPage onNavigate={(v) => setView(v as View)} />}
+          {view === "generate" && <GeneratePage onNavigate={(v) => setView(v as View)} />}
           {view === "profile" && <ProfilePage />}
         </div>
       </main>

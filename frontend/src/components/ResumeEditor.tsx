@@ -1,7 +1,7 @@
 import { forwardRef, useImperativeHandle, useRef, useEffect } from 'react'
 import { useEditor, EditorContent, NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react'
 import type { NodeViewProps } from '@tiptap/react'
-import { Node, mergeAttributes } from '@tiptap/core'
+import { Node } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import { Bold, Italic, UnderlineIcon, List, ListOrdered, Download } from 'lucide-react'

@@ -30,4 +30,6 @@ syncOnce()
 const interval = setInterval(syncOnce, 1500)
 // Stop polling after 10 minutes to avoid a forever-timer on an idle tab.
 setTimeout(() => clearInterval(interval), 10 * 60 * 1000)
+// Also stop immediately if the page unloads or the extension context is invalidated.
+window.addEventListener('unload', () => clearInterval(interval))
 window.addEventListener('focus', syncOnce)

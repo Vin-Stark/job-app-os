@@ -225,7 +225,7 @@ export function LandingPage() {
             onClick={() => navigate(isLoggedIn ? '/dashboard' : '/login')}
             style={{
               background: '#C6FF34', color: '#171717', border: 'none',
-              borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 600,
+              borderRadius: 999, padding: '9px 20px', fontSize: 13, fontWeight: 600,
               cursor: 'pointer', transition: 'opacity 0.15s, transform 0.15s',
             }}
             onMouseEnter={e => { e.currentTarget.style.opacity = '0.88'; e.currentTarget.style.transform = 'translateY(-1px)' }}
@@ -320,7 +320,7 @@ export function LandingPage() {
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     background: '#C6FF34', color: '#171717', border: 'none',
-                    borderRadius: 10, padding: '14px 28px',
+                    borderRadius: 999, padding: '14px 28px',
                     fontSize: 15, fontWeight: 700, cursor: 'pointer',
                     transition: 'transform 0.15s, box-shadow 0.15s',
                   }}
@@ -365,6 +365,12 @@ export function LandingPage() {
                   fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', textTransform: 'uppercase',
                 }}>
                   Resume match score
+                </div>
+                <div style={{
+                  fontSize: 9, color: 'rgba(255,255,255,0.2)', marginTop: 4,
+                  fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', textTransform: 'uppercase',
+                }}>
+                  Demo
                 </div>
               </div>
             </div>
@@ -475,7 +481,7 @@ export function LandingPage() {
             style={{
               display: 'flex', alignItems: 'center', gap: 10,
               background: '#C6FF34', color: '#171717', border: 'none',
-              borderRadius: 12, padding: '16px 36px',
+              borderRadius: 999, padding: '16px 36px',
               fontSize: 16, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
               transition: 'transform 0.15s, box-shadow 0.15s',
             }}

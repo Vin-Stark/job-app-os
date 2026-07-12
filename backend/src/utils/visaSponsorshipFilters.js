@@ -285,7 +285,6 @@ const sponsorshipFriendlyPhrases = [
  const noOPTCPTRegexes = [
 
   // OPT
-  /(?<!not\s)(?<!unable\s+to\s)(?<!cannot\s)(support\s+cpt)/i,
   /opt\s+not\s+eligible/i,
   /not\s+support.*opt/i,
   /cannot\s+support.*opt/i,
@@ -318,7 +317,6 @@ const sponsorshipFriendlyPhrases = [
   /no\s+f[\s-]?1\s+candidates/i,
   /f[\s-]?1\s+students?.*not\s+eligible/i,
 /f[\s-]?1\s+visa\s+holders?.*not\s+eligible/i,
-/.*support.*cpt/i,
 /((unable|cannot|do\s+not|will\s+not).*)support.*cpt/i,
 
   // International students

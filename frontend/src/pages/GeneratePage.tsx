@@ -197,7 +197,6 @@ export function GeneratePage({ onNavigate }: { onNavigate: (view: string) => voi
               onChange={e => setJdText(e.target.value)}
               placeholder={"We're looking for an engineer to join our growth team...\n\nRequirements:\n• 5+ years of React experience\n• Strong TypeScript skills\n• Experience with design systems"}
               className="w-full h-full resize-none text-[12px] bg-muted/40 border border-border rounded-md p-3 text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring leading-relaxed"
-              style={MONO}
             />
           </div>
 
@@ -216,7 +215,7 @@ export function GeneratePage({ onNavigate }: { onNavigate: (view: string) => voi
                   onClick={() => setIncludeCoverLetter(opt.value)}
                   className={`flex-1 h-7 text-[11px] rounded transition-colors whitespace-nowrap ${
                     includeCoverLetter === opt.value
-                      ? 'bg-card text-foreground font-medium shadow-sm'
+                      ? 'bg-card text-foreground font-medium'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                   style={MONO}
@@ -232,11 +231,12 @@ export function GeneratePage({ onNavigate }: { onNavigate: (view: string) => voi
             <button
               onClick={handleAnalyze}
               disabled={!canAnalyze || analyze.isPending || finalize.isPending}
-              className="w-full flex items-center justify-center gap-2 h-9 bg-foreground text-background text-[13px] font-medium rounded-md hover:opacity-85 disabled:opacity-35 disabled:cursor-not-allowed transition-opacity"
+              className="w-full flex items-center justify-center gap-2 h-9 text-[13px] font-medium rounded-full hover:opacity-85 disabled:opacity-35 disabled:cursor-not-allowed transition-opacity"
+              style={{ background: 'var(--lime)', color: 'var(--lime-foreground)' }}
             >
               {analyze.isPending ? (
                 <>
-                  <div className="w-3.5 h-3.5 border-2 border-background/25 border-t-background rounded-full animate-spin" />
+                  <div className="w-3.5 h-3.5 border-2 border-black/20 border-t-black/70 rounded-full animate-spin" />
                   Analyzing…
                 </>
               ) : (
@@ -424,7 +424,7 @@ export function GeneratePage({ onNavigate }: { onNavigate: (view: string) => voi
                       onClick={() => setGenTab('resume')}
                       className={`px-4 h-7 text-[11px] rounded transition-colors whitespace-nowrap ${
                         genTab === 'resume'
-                          ? 'bg-card text-foreground font-medium shadow-sm'
+                          ? 'bg-card text-foreground font-medium'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                       style={MONO}
@@ -435,7 +435,7 @@ export function GeneratePage({ onNavigate }: { onNavigate: (view: string) => voi
                       onClick={() => setGenTab('cover')}
                       className={`px-4 h-7 text-[11px] rounded transition-colors whitespace-nowrap ${
                         genTab === 'cover'
-                          ? 'bg-card text-foreground font-medium shadow-sm'
+                          ? 'bg-card text-foreground font-medium'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                       style={MONO}

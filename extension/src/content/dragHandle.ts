@@ -36,8 +36,8 @@ export function injectDragHandle(filename: string, dataUrl: string): void {
   wrap.setAttribute('draggable', 'true')
   wrap.style.cssText = [
     'position:fixed', 'z-index:2147483647', 'right:20px', 'bottom:20px',
-    'background:#111827', 'color:#fff', 'padding:12px 16px', 'border-radius:10px',
-    'box-shadow:0 8px 24px rgba(0,0,0,.35)', 'font:600 13px system-ui,sans-serif',
+    'background:#1a1a1a', 'color:#fff', 'padding:12px 16px', 'border-radius:10px',
+    'border:1px solid rgba(255,255,255,0.12)', 'font:600 13px system-ui,sans-serif',
     'cursor:grab', 'user-select:none', 'display:flex', 'gap:10px', 'align-items:center',
     'max-width:280px',
   ].join(';')
@@ -45,8 +45,9 @@ export function injectDragHandle(filename: string, dataUrl: string): void {
     '<span style="line-height:1.3">Drag me into the<br><b>Upload résumé</b> field' +
     '<span style="display:block;font-weight:400;opacity:.7;font-size:11px;margin-top:2px">' +
     filename + '</span></span>'
+  const fileIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.65)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>'
   wrap.innerHTML =
-    '<span style="font-size:18px">📄</span>' + label +
+    fileIcon + label +
     '<span id="__jobappos_close__" style="margin-left:6px;opacity:.6;cursor:pointer;font-weight:400">✕</span>'
 
   let dragging = false

@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const verifyToken = require('../middleware/authMiddleware');
+const { respondError } = require('../services/claude');
 
 const router = express.Router();
 
@@ -60,8 +61,7 @@ router.get('/:resumeId', verifyToken, async (req, res) => {
             projects: allProjects,
         });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Failed to load links.', message: 'linksRoutes' });
+        respondError(res, err, 'linksRoutes', 'Failed to load links.');
     }
 });
 
@@ -97,25 +97,27 @@ router.put('/:resumeId', verifyToken, async (req, res) => {
             ]
         );
 
-        // Upsert each project row
-        for (const proj of projects) {
-            if (!proj.project_name) continue;
+        // Upsert all project rows in one batch
+        const validProjects = projects.filter(p => p.project_name);
+        if (validProjects.length > 0) {
             await pool.query(
                 `INSERT INTO resume_projects (user_id, resume_id, project_name, github_url, live_url)
-VALUES ($1, $2, $3, $4, $5)
+SELECT $1, $2, UNNEST($3::text[]), UNNEST($4::text[]), UNNEST($5::text[])
 ON CONFLICT (resume_id, project_name)
 DO UPDATE SET
   github_url = EXCLUDED.github_url,
   live_url   = EXCLUDED.live_url,
   updated_at = NOW()`,
-                [user_id, resume_id, proj.project_name, proj.github_url || null, proj.live_url || null]
+                [user_id, resume_id,
+                 validProjects.map(p => p.project_name),
+                 validProjects.map(p => p.github_url || null),
+                 validProjects.map(p => p.live_url   || null)]
             );
         }
 
         res.json({ success: true });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Failed to save links.', message: 'linksRoutes' });
+        respondError(res, err, 'linksRoutes', 'Failed to save links.');
     }
 });
 

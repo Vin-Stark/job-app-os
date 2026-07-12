@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "Job App OS — Capture & Tailor",
+  "name": "tailr — Capture & Tailor",
   "version": "0.2.2",
   "description": "Capture a job posting, gate it on eligibility, and drag a tailored resume straight into the application.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyIUHMF1ZldHhYnYrUu66L/qQxD6iH9/a2Puuml9NRladsxrxG0ZbTtSIqqsTEerob7Zs/hCiH5sPnSxR1lnyfEPvbUh622dYOWIyXtAaNRmXw+jy3iTrqyiK/Gj01QffBHAlCIklq2upmGlxmzN2FrpNXeZ0otNywSYqfH85sNumKt3kjJnE9VreCJftSfzkgUIYjNm+x4wMIdxwKk4KkXEA9LizFRaRrS+ng6rJUT9+Ae9RBW1t60C3rvkp7m119gQVqfe0+o3VMiMqu9Uz3GaoAIeXHETjYXs1KkbqM2SVIMwIAII44Qvr1jK3VOMIldgp8OU6B9PGv/y3XeFYzwIDAQAB",
   "action": {
-    "default_title": "Job App OS",
+    "default_title": "tailr",
     "default_icon": {
       "16": "public/icons/icon16.png",
       "48": "public/icons/icon48.png",
@@ -28,7 +28,8 @@
   ],
   "host_permissions": [
     "http://localhost:5001/*",
-    "http://localhost:5173/*"
+    "http://localhost:5173/*",
+    "https://job-app-os.vercel.app/*"
   ],
   "optional_host_permissions": [
     "https://*/*",
@@ -37,7 +38,8 @@
   "content_scripts": [
     {
       "matches": [
-        "http://localhost:5173/*"
+        "http://localhost:5173/*",
+        "https://job-app-os.vercel.app/*"
       ],
       "js": [
         "src/content/tokenSync.ts"

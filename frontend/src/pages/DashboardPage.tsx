@@ -1,23 +1,12 @@
-import { ArrowRight, Briefcase, TrendingUp, Clock, CheckCircle, Zap, ChevronRight, Star } from 'lucide-react'
+import { ArrowRight, Briefcase, TrendingUp, Clock, CheckCircle, Zap, ChevronRight } from 'lucide-react'
 import { useApplications, type Application } from '@/hooks/useApplications'
 import { STATUS_CONFIG, ALL_STATUSES, type ApplicationStatus } from '@/lib/statusConfig'
-
-// ── Status badge ──────────────────────────────────────────────────────────────
-function StatusBadge({ status }: { status: ApplicationStatus }) {
-  const cfg = STATUS_CONFIG[status]
-  return (
-    <span className={`inline-flex items-center gap-1.5 text-[9px] px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.text} ${cfg.border}`}
-      style={{ fontFamily: 'var(--font-mono)' }}>
-      <span className={`w-1 h-1 rounded-full flex-shrink-0 ${cfg.dot}`} />
-      {cfg.label}
-    </span>
-  )
-}
+import { StatusBadge } from '@/components/StatusBadge'
 
 // ── Company initial badge ─────────────────────────────────────────────────────
 function CompanyBadge({ name }: { name: string | null }) {
   return (
-    <div className="w-6 h-6 rounded bg-muted border border-border flex items-center justify-center text-[9px] font-bold text-foreground flex-shrink-0">
+    <div className="w-6 h-6 rounded-[6px] bg-muted border border-border flex items-center justify-center text-[9px] font-bold text-foreground flex-shrink-0">
       {name?.[0]?.toUpperCase() ?? '?'}
     </div>
   )
@@ -135,7 +124,7 @@ export function DashboardPage({ onNavigate }: { onNavigate: (view: string) => vo
       {/* ── Stat cards ── */}
       <div className="grid grid-cols-4 gap-4">
         {STATS.map(({ label, value, sub, icon: Icon }) => (
-          <div key={label} className="bg-card border border-border rounded-lg px-4 py-4 hover:shadow-sm transition-shadow">
+          <div key={label} className="bg-card border border-border rounded-lg px-4 py-4 hover:bg-muted/20 transition-colors">
             <div className="flex items-center justify-between mb-4">
               <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground font-medium"
                 style={{ fontFamily: 'var(--font-mono)' }}>
@@ -143,7 +132,7 @@ export function DashboardPage({ onNavigate }: { onNavigate: (view: string) => vo
               </span>
               <Icon size={13} className="text-muted-foreground" strokeWidth={1.5} />
             </div>
-            <div className="text-[32px] font-extrabold text-foreground leading-none mb-2 tracking-tight"
+            <div className="text-[40px] font-extrabold text-foreground leading-none mb-2 tracking-tight"
               style={{ fontFamily: 'var(--font-stat)' }}>
               {value}
             </div>
@@ -213,7 +202,8 @@ export function DashboardPage({ onNavigate }: { onNavigate: (view: string) => vo
               </p>
               <button
                 onClick={() => onNavigate('generate')}
-                className="flex items-center gap-1.5 px-3 h-7 text-[11px] bg-foreground text-background rounded-md hover:opacity-85 transition-opacity"
+                className="flex items-center gap-1.5 px-4 h-8 text-[11px] font-medium rounded-full hover:opacity-85 transition-opacity"
+                style={{ background: 'var(--lime)', color: 'var(--lime-foreground)' }}
               >
                 <Zap size={11} /> Generate first application
               </button>
@@ -249,21 +239,23 @@ export function DashboardPage({ onNavigate }: { onNavigate: (view: string) => vo
       {/* ── CTA banner ── */}
       <div
         onClick={() => onNavigate('generate')}
-        className="bg-foreground rounded-lg px-6 py-5 flex items-center justify-between cursor-pointer hover:opacity-90 transition-opacity"
+        className="rounded-lg px-6 py-5 flex items-center justify-between cursor-pointer hover:opacity-90 transition-opacity"
+        style={{ background: 'var(--lime)' }}
       >
         <div>
-          <div className="text-[15px] font-semibold text-background mb-1"
-            style={{ fontFamily: 'var(--font-display)' }}>
+          <div className="text-[15px] font-semibold mb-1"
+            style={{ fontFamily: 'var(--font-display)', color: 'var(--lime-foreground)' }}>
             Generate tailored resume &amp; cover letter
           </div>
-          <p className="text-[12px] text-background/50">
+          <p className="text-[12px]" style={{ color: 'rgba(23,23,23,0.5)' }}>
             Paste a job description and get matched documents in under 5 seconds.
           </p>
         </div>
-        <div className="flex items-center gap-2 bg-background/10 hover:bg-background/20 transition-colors rounded-md px-4 py-2.5 flex-shrink-0">
-          <Zap size={13} className="text-background" />
-          <span className="text-[12px] font-medium text-background">Try it now</span>
-          <ChevronRight size={13} className="text-background/70" />
+        <div className="flex items-center gap-2 rounded-md px-4 py-2.5 flex-shrink-0"
+          style={{ background: 'rgba(23,23,23,0.12)' }}>
+          <Zap size={13} style={{ color: 'var(--lime-foreground)' }} />
+          <span className="text-[12px] font-medium" style={{ color: 'var(--lime-foreground)' }}>Try it now</span>
+          <ChevronRight size={13} style={{ color: 'rgba(23,23,23,0.6)' }} />
         </div>
       </div>
     </div>

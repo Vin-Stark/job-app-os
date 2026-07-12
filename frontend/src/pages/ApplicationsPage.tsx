@@ -2,21 +2,9 @@ import { useState } from 'react'
 import { Search, Trash2, Zap } from 'lucide-react'
 import { useApplications, useUpdateApplication, useDeleteApplication } from '@/hooks/useApplications'
 import { STATUS_CONFIG, ALL_STATUSES, type ApplicationStatus } from '@/lib/statusConfig'
+import { StatusBadge } from '@/components/StatusBadge'
 
 type FilterStatus = ApplicationStatus | 'all'
-
-function StatusBadge({ status }: { status: ApplicationStatus }) {
-  const cfg = STATUS_CONFIG[status]
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 text-[9px] px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.text} ${cfg.border}`}
-      style={{ fontFamily: 'var(--font-mono)' }}
-    >
-      <span className={`w-1 h-1 rounded-full flex-shrink-0 ${cfg.dot}`} />
-      {cfg.label}
-    </span>
-  )
-}
 
 function Skeleton({ className }: { className?: string }) {
   return <div className={`animate-pulse rounded bg-muted/60 ${className}`} />
@@ -100,11 +88,11 @@ export function ApplicationsPage({ onNavigate }: { onNavigate: (view: string) =>
           <button
             onClick={() => setFilterStatus('all')}
             className={`px-2.5 h-6 text-[10px] rounded transition-colors whitespace-nowrap flex-shrink-0 ${
-              filterStatus === 'all'
-                ? 'bg-foreground text-background font-medium'
-                : 'text-muted-foreground hover:text-foreground'
+              filterStatus === 'all' ? 'font-medium' : 'text-muted-foreground hover:text-foreground'
             }`}
-            style={{ fontFamily: 'var(--font-mono)' }}
+            style={filterStatus === 'all'
+              ? { fontFamily: 'var(--font-mono)', background: 'var(--lime)', color: 'var(--lime-foreground)' }
+              : { fontFamily: 'var(--font-mono)' }}
           >
             All ({list.length})
           </button>
@@ -113,11 +101,11 @@ export function ApplicationsPage({ onNavigate }: { onNavigate: (view: string) =>
               key={s}
               onClick={() => setFilterStatus(s)}
               className={`px-2.5 h-6 text-[10px] rounded transition-colors whitespace-nowrap flex-shrink-0 ${
-                filterStatus === s
-                  ? 'bg-foreground text-background font-medium'
-                  : 'text-muted-foreground hover:text-foreground'
+                filterStatus === s ? 'font-medium' : 'text-muted-foreground hover:text-foreground'
               }`}
-              style={{ fontFamily: 'var(--font-mono)' }}
+              style={filterStatus === s
+                ? { fontFamily: 'var(--font-mono)', background: 'var(--lime)', color: 'var(--lime-foreground)' }
+                : { fontFamily: 'var(--font-mono)' }}
             >
               {STATUS_CONFIG[s].label} ({statusCounts[s]})
             </button>
@@ -134,7 +122,8 @@ export function ApplicationsPage({ onNavigate }: { onNavigate: (view: string) =>
           </p>
           <button
             onClick={() => onNavigate('generate')}
-            className="flex items-center gap-1.5 px-3 h-7 text-[11px] bg-foreground text-background rounded-md hover:opacity-85 transition-opacity"
+            className="flex items-center gap-1.5 px-4 h-8 text-[11px] font-medium rounded-full hover:opacity-85 transition-opacity"
+            style={{ background: 'var(--lime)', color: 'var(--lime-foreground)' }}
           >
             <Zap size={11} /> Generate first application
           </button>
@@ -148,10 +137,10 @@ export function ApplicationsPage({ onNavigate }: { onNavigate: (view: string) =>
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-border">
-                {['Company', 'Role', 'Location', 'Salary', 'Status', 'Applied', ''].map(h => (
+                {['Company', 'Role', 'Location', 'Status', 'Applied', ''].map(h => (
                   <th
                     key={h}
-                    className="px-4 py-2.5 text-[9px] font-medium uppercase tracking-[0.1em] text-muted-foreground bg-muted/30"
+                    className="px-4 py-2.5 text-[9px] font-medium uppercase tracking-[0.1em] text-muted-foreground bg-muted"
                     style={{ fontFamily: 'var(--font-mono)' }}
                   >
                     {h}
@@ -168,7 +157,7 @@ export function ApplicationsPage({ onNavigate }: { onNavigate: (view: string) =>
                   {/* Company */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-6 h-6 rounded bg-muted border border-border flex items-center justify-center text-[9px] font-bold text-foreground flex-shrink-0">
+                      <div className="w-6 h-6 rounded-[6px] bg-muted border border-border flex items-center justify-center text-[9px] font-bold text-foreground flex-shrink-0">
                         {app.company_name?.[0]?.toUpperCase() ?? '?'}
                       </div>
                       <span className="text-[13px] font-medium text-foreground">
@@ -191,16 +180,6 @@ export function ApplicationsPage({ onNavigate }: { onNavigate: (view: string) =>
                     </span>
                   </td>
 
-                  {/* Salary */}
-                  <td className="px-4 py-3">
-                    <span
-                      className="text-[12px] text-muted-foreground"
-                      style={{ fontFamily: 'var(--font-mono)' }}
-                    >
-                      {app.salary ?? 'Not specified'}
-                    </span>
-                  </td>
-
                   {/* Status — badge with invisible select overlay for inline editing */}
                   <td className="px-4 py-3">
                     <div className="relative inline-flex">
@@ -210,7 +189,8 @@ export function ApplicationsPage({ onNavigate }: { onNavigate: (view: string) =>
                         onChange={e =>
                           updateApp.mutate({ id: app.id, status: e.target.value as ApplicationStatus })
                         }
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full"
+                        disabled={updateApp.isPending}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full disabled:cursor-not-allowed"
                         title="Change status"
                       >
                         {ALL_STATUSES.map(s => (

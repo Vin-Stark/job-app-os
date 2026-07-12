@@ -23,7 +23,20 @@ type Phase =
 // Band colors for the Job Match headline (thresholds mirror the backend's
 // recommendation bands: ≥80 good, 60–79 borderline, <60 tailor first).
 const matchBandCls = (s: number | null) =>
-  s == null ? 'text-slate-200' : s >= 80 ? 'text-emerald-300' : s >= 60 ? 'text-amber-300' : 'text-rose-300'
+  s == null ? 'text-zinc-200' : s >= 80 ? 'text-emerald-300' : s >= 60 ? 'text-amber-300' : 'text-rose-300'
+
+// Color-banded card background for the scored screen.
+const scoreBandCls = (s: number | null) =>
+  s == null ? 'border-zinc-800 bg-zinc-900/60'
+  : s >= 80 ? 'border-emerald-800/60 bg-emerald-950/40'
+  : s >= 60 ? 'border-amber-800/60 bg-amber-950/40'
+  : 'border-rose-800/60 bg-rose-950/40'
+
+// Color-banded pill for the done screen match score badge.
+const matchPillCls = (s: number) =>
+  s >= 80 ? 'bg-emerald-950/60 border-emerald-800/60 text-emerald-300'
+  : s >= 60 ? 'bg-amber-950/60 border-amber-800/60 text-amber-300'
+  : 'bg-rose-950/60 border-rose-800/60 text-rose-300'
 
 // Real skills (must-have + preferred) the resume lacks, must-haves first —
 // domain terms are context vocabulary, not skills, and are excluded. Capped
@@ -484,18 +497,21 @@ export function App() {
         </div>
       )}
 
-      {phase === 'loading' && <p className="text-slate-400">Loading…</p>}
+      {phase === 'loading' && <p className="text-zinc-400">Loading…</p>}
 
       {phase === 'unauth' && (
         <div className="space-y-3">
-          <p className="text-slate-300 leading-relaxed">
-            Connect your Job App OS account to capture jobs and tailor resumes.
+          <p className="text-zinc-300 leading-relaxed">
+            Connect your tailr account to capture jobs and tailor resumes.
           </p>
-          <button onClick={openLogin} className="w-full h-9 rounded-md bg-white text-slate-900 font-semibold hover:opacity-90">
+          <button onClick={openLogin}
+            className="w-full h-9 rounded-full font-semibold hover:opacity-90"
+            style={{ background: '#C6FF34', color: '#171717' }}>
             Connect account
           </button>
-          <button onClick={refreshAuth} className="w-full h-8 rounded-md border border-slate-700 text-slate-300 hover:bg-slate-800 text-[12px]">
-            I’ve logged in — refresh
+          <button onClick={refreshAuth}
+            className="w-full h-8 rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-[12px]">
+            I've logged in — refresh
           </button>
         </div>
       )}
@@ -503,20 +519,23 @@ export function App() {
       {phase === 'ready' && (
         <div className="space-y-3">
           {!resumesLoaded ? (
-            <button onClick={refreshAuth} className="w-full h-9 rounded-md border border-slate-700 text-slate-300 hover:bg-slate-800">
+            <button onClick={refreshAuth}
+              className="w-full h-9 rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800">
               Retry loading resumes
             </button>
           ) : resumes.length === 0 ? (
             <p className="text-amber-300 leading-relaxed">
-              No resume on file. Upload one in the web app’s Profile, then reopen this.
+              No resume on file. Upload one in the web app's Profile, then reopen this.
             </p>
           ) : (
             <>
               <ResumePicker resumes={resumes} value={resumeId} onChange={setResumeId} />
-              <button onClick={capture} className="w-full h-10 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-semibold">
+              <button onClick={capture}
+                className="w-full h-10 rounded-full font-semibold hover:opacity-90"
+                style={{ background: '#C6FF34', color: '#171717' }}>
                 Capture this job
               </button>
-              <p className="text-[11px] text-slate-500 text-center">
+              <p className="text-[11px] text-zinc-500 text-center">
                 Reads the open posting. Nothing is saved until you pass the checks.
               </p>
             </>
@@ -533,7 +552,7 @@ export function App() {
             </div>
           )}
           {restoredAt != null && (
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-zinc-500">
               Restored draft · captured {relativeTime(restoredAt)}
             </p>
           )}
@@ -544,35 +563,38 @@ export function App() {
             placeholder="e.g. Acme" className={inputCls} /></Field>
           <Field label={`Job description${source ? ` · via ${source}` : ''}`}>
             <textarea value={jd} onChange={e => setJd(e.target.value)} rows={5}
-              placeholder="Paste the JD here if the page couldn’t be read." className={inputCls + ' resize-none'} />
+              placeholder="Paste the JD here if the page couldn't be read." className={inputCls + ' resize-none'} />
           </Field>
-          {/* Healthy capture → calm confirmation; diagnostics only on failure */}
           {(source === 'ai-extract' || source === 'json-ld' || (source === 'ats' && jd.trim().length > 300)) ? (
             <p className="text-[11px] text-emerald-400">
               ✓ Captured{source === 'ai-extract' ? ' & cleaned by AI' : ''} — review the fields and continue.
             </p>
           ) : (
             scrapeDebug && (
-              <p className="text-[10px] text-slate-600 leading-relaxed break-all">🔎 {scrapeDebug}</p>
+              <p className="text-[10px] text-zinc-600 leading-relaxed break-all">{scrapeDebug}</p>
             )
           )}
           <div className="flex gap-2">
-            <button onClick={useSelection} className="flex-1 h-8 rounded-md border border-slate-700 text-slate-300 hover:bg-slate-800 text-[12px]">
+            <button onClick={useSelection}
+              className="flex-1 h-8 rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-[12px]">
               Use highlighted text
             </button>
-            <button onClick={capture} className="flex-1 h-8 rounded-md border border-slate-700 text-slate-300 hover:bg-slate-800 text-[12px]">
+            <button onClick={capture}
+              className="flex-1 h-8 rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-[12px]">
               Re-scrape page
             </button>
           </div>
           <button onClick={cleanUpWithAI} disabled={cleaning}
-            className="w-full h-8 rounded-md border border-slate-700 text-slate-300 hover:bg-slate-800 text-[12px] disabled:opacity-40 flex items-center justify-center gap-2">
-            {cleaning && <span className="w-3 h-3 border-2 border-slate-600 border-t-white rounded-full animate-spin" />}
-            {cleaning ? 'Cleaning…' : '✨ Clean up with AI (extract role · company · JD)'}
+            className="w-full h-8 rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-[12px] disabled:opacity-40 flex items-center justify-center gap-2">
+            {cleaning && <span className="w-3 h-3 border-2 border-zinc-600 border-t-white rounded-full animate-spin" />}
+            {cleaning ? 'Cleaning…' : 'Clean up with AI (extract role · company · JD)'}
           </button>
-          <button onClick={run} className="w-full h-10 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-semibold">
+          <button onClick={run}
+            className="w-full h-10 rounded-full font-semibold hover:opacity-90"
+            style={{ background: '#C6FF34', color: '#171717' }}>
             Check eligibility & match
           </button>
-          <button onClick={reset} className="w-full h-8 text-[12px] text-slate-400 hover:text-slate-200">Cancel</button>
+          <button onClick={reset} className="w-full h-8 text-[12px] text-zinc-400 hover:text-zinc-200">Cancel</button>
         </div>
       )}
 
@@ -583,33 +605,37 @@ export function App() {
 
       {phase === 'scored' && (
         <div className="space-y-3">
-          <div className="rounded-md border border-slate-800 bg-slate-900/60 px-3 py-3">
+          <div className={`rounded-[10px] border px-3 py-3 ${scoreBandCls(matchScore)}`}>
             <div className="flex items-baseline justify-between">
-              <span className="text-[11px] uppercase tracking-wide text-slate-500">Job match</span>
-              <span className={`text-[22px] font-bold ${matchBandCls(matchScore)}`}>{matchScore}%</span>
+              <span className="text-[11px] uppercase tracking-[0.12em] text-zinc-500"
+                style={{ fontFamily: 'var(--font-mono)' }}>Job match</span>
+              <span className={`text-[32px] font-bold leading-none ${matchBandCls(matchScore)}`}
+                style={{ fontFamily: 'var(--font-stat)' }}>{matchScore}%</span>
             </div>
             {recommendation && (
-              <p className="mt-1.5 text-[12px] leading-relaxed text-slate-300">
-                <b className="text-slate-200">Interview chances: {recommendation.interview_chances}.</b>{' '}
+              <p className="mt-1.5 text-[12px] leading-relaxed text-zinc-300">
+                <b className="text-zinc-200">Interview chances: {recommendation.interview_chances}.</b>{' '}
                 {recommendation.advice}
               </p>
             )}
           </div>
           <SkillGaps skills={skills} />
-          <p className="text-[11px] text-slate-500 leading-relaxed">
+          <p className="text-[11px] text-zinc-500 leading-relaxed">
             Job match = AI judgment of how well your background fits this role.
             Skill gaps are split by what they mean: proof-based ones are already
             evidenced in your resume, trainable ones have a same-kind tool you
             know — only real gaps stay gaps. Tailoring never invents skills.
           </p>
           <ChecksList checks={checks} />
-          <button onClick={generate} className="w-full h-10 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-semibold">
+          <button onClick={generate}
+            className="w-full h-10 rounded-full font-semibold hover:opacity-90"
+            style={{ background: '#C6FF34', color: '#171717' }}>
             Generate tailored resume
           </button>
-          <p className="text-[11px] text-slate-500 text-center">
+          <p className="text-[11px] text-zinc-500 text-center">
             Not in your tracker yet — generating adds it.
           </p>
-          <button onClick={reset} className="w-full h-8 text-[12px] text-slate-400 hover:text-slate-200">Start over</button>
+          <button onClick={reset} className="w-full h-8 text-[12px] text-zinc-400 hover:text-zinc-200">Start over</button>
         </div>
       )}
 
@@ -619,33 +645,34 @@ export function App() {
             {ineligibleMsg}
           </div>
           <ChecksList checks={checks} />
-          <p className="text-[11px] text-slate-500">Not added to your tracker — nothing was logged.</p>
-          <button onClick={() => setPhase('review')} className="w-full h-9 rounded-md border border-slate-700 text-slate-300 hover:bg-slate-800">
+          <p className="text-[11px] text-zinc-500">Not added to your tracker — nothing was logged.</p>
+          <button onClick={() => setPhase('review')}
+            className="w-full h-9 rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800">
             Edit & retry
           </button>
-          <button onClick={reset} className="w-full h-8 text-[12px] text-slate-400 hover:text-slate-200">Start over</button>
+          <button onClick={reset} className="w-full h-8 text-[12px] text-zinc-400 hover:text-zinc-200">Start over</button>
         </div>
       )}
 
       {phase === 'done' && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="rounded-full bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 px-2.5 py-1 text-[12px] font-semibold">
               Eligible · logged to tracker
             </span>
             {matchScore != null && (
-              <span className="rounded-full bg-slate-800 text-slate-200 px-2.5 py-1 text-[12px] font-semibold">
+              <span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold border ${matchPillCls(matchScore)}`}>
                 Match {matchScore}%
               </span>
             )}
             {missingSkills != null && (
-              <span className="rounded-full bg-slate-800 text-slate-200 px-2.5 py-1 text-[12px] font-semibold">
+              <span className="rounded-full bg-zinc-800 border border-zinc-700 text-zinc-200 px-2.5 py-1 text-[12px] font-semibold">
                 {missingSkills.length} missing
               </span>
             )}
           </div>
           {restoredAt != null && (
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-zinc-500">
               {company || title ? `${company}${company && title ? ' · ' : ''}${title} — ` : ''}
               generated {relativeTime(restoredAt)}
             </p>
@@ -653,25 +680,26 @@ export function App() {
           {checks.length > 0 && <ChecksList checks={checks} />}
           <div className="grid grid-cols-2 gap-2">
             <button onClick={preview} disabled={!pdfDataUrl}
-              className="h-9 rounded-md border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-40">
+              className="h-9 rounded-md border border-zinc-700 text-zinc-200 hover:bg-zinc-800 disabled:opacity-40">
               Preview
             </button>
             <button onClick={download} disabled={!pdfDataUrl}
-              className="h-9 rounded-md border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-40">
+              className="h-9 rounded-md border border-zinc-700 text-zinc-200 hover:bg-zinc-800 disabled:opacity-40">
               Download
             </button>
           </div>
           <button onClick={enableDrag} disabled={!pdfDataUrl}
-            className="w-full h-10 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-semibold disabled:opacity-40">
+            className="w-full h-10 rounded-full font-semibold hover:opacity-90 disabled:opacity-40"
+            style={{ background: '#C6FF34', color: '#171717' }}>
             Drag into the application
           </button>
-          {dragMsg && <p className="text-[11px] text-slate-400 leading-relaxed">{dragMsg}</p>}
+          {dragMsg && <p className="text-[11px] text-zinc-400 leading-relaxed">{dragMsg}</p>}
           {!pdfDataUrl && (
             <p className="text-[11px] text-amber-300">
-              PDF couldn’t be generated from the tailored text, but it’s saved in your tracker.
+              PDF couldn't be generated from the tailored text, but it's saved in your tracker.
             </p>
           )}
-          <button onClick={reset} className="w-full h-8 text-[12px] text-slate-400 hover:text-slate-200">Capture another</button>
+          <button onClick={reset} className="w-full h-8 text-[12px] text-zinc-400 hover:text-zinc-200">Capture another</button>
         </div>
       )}
     </div>
@@ -679,7 +707,7 @@ export function App() {
 }
 
 const inputCls =
-  'w-full px-3 py-2 rounded-md bg-slate-900 border border-slate-700 text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-600 text-[12px]'
+  'w-full px-3 py-2 rounded-md bg-zinc-900 border border-zinc-700 text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-[#C6FF34]/40 text-[12px]'
 
 function Header({ userName, phase }: { userName: string; phase: Phase }) {
   // Version in the header proves which build is loaded — bump on every fix.
@@ -687,11 +715,23 @@ function Header({ userName, phase }: { userName: string; phase: Phase }) {
   try { version = chrome.runtime.getManifest().version } catch { /* non-extension context */ }
   return (
     <div className="flex items-center justify-between mb-3">
-      <div className="font-bold text-[14px] text-white">
-        Job App OS{version && <span className="ml-1.5 text-[10px] font-normal text-slate-500">v{version}</span>}
+      <div className="flex items-center gap-2">
+        <div style={{
+          background: '#C6FF34', color: '#171717', width: '20px', height: '20px',
+          borderRadius: '5px', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', flexShrink: 0,
+        }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" />
+          </svg>
+        </div>
+        <span style={{ fontWeight: 600, fontSize: '14px', color: '#fff', letterSpacing: '-0.01em' }}>
+          tailr{version && <span style={{ marginLeft: '6px', fontSize: '10px', fontWeight: 400, color: '#71717a' }}>v{version}</span>}
+        </span>
       </div>
       {phase !== 'loading' && phase !== 'unauth' && userName && (
-        <div className="text-[11px] text-slate-500 truncate max-w-[160px]">{userName}</div>
+        <div className="text-[11px] text-zinc-500 truncate max-w-[140px]">{userName}</div>
       )}
     </div>
   )
@@ -700,7 +740,8 @@ function Header({ userName, phase }: { userName: string; phase: Phase }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="block text-[10px] uppercase tracking-wide text-slate-500 mb-1">{label}</span>
+      <span className="block text-[10px] uppercase tracking-[0.12em] text-zinc-500 mb-1"
+        style={{ fontFamily: 'var(--font-mono)' }}>{label}</span>
       {children}
     </label>
   )
@@ -733,14 +774,14 @@ function SkillGaps({ skills }: { skills: SkillsBreakdown | null }) {
   const terms = (list: string[], cap = 6) =>
     list.slice(0, cap).join(' · ') + (list.length > cap ? ' · …' : '')
   return (
-    <div className="rounded-md border border-slate-800 px-3 py-2.5 space-y-2.5">
+    <div className="rounded-[10px] border border-zinc-800 px-3 py-2.5 space-y-2.5">
       {skills.must_have_missing.length > 0 ? (
         <div>
           <div className="flex items-center justify-between text-[12px]">
             <span className="font-semibold text-rose-300">Must-have skills missing</span>
             <span className="font-semibold text-rose-300">{skills.must_have_missing.length}</span>
           </div>
-          <p className="mt-0.5 text-[11px] text-slate-400 leading-relaxed">{terms(skills.must_have_missing)}</p>
+          <p className="mt-0.5 text-[11px] text-zinc-400 leading-relaxed">{terms(skills.must_have_missing)}</p>
         </div>
       ) : (
         <p className="text-[12px] text-emerald-300">✓ All must-have skills covered</p>
@@ -751,7 +792,7 @@ function SkillGaps({ skills }: { skills: SkillsBreakdown | null }) {
             <span className="font-semibold text-emerald-300">Proof-based — you've done this work</span>
             <span className="font-semibold text-emerald-300">{skills.proof_based.length}</span>
           </div>
-          <p className="mt-0.5 text-[11px] text-slate-400 leading-relaxed">{terms(skills.proof_based.map(p => p.term))}</p>
+          <p className="mt-0.5 text-[11px] text-zinc-400 leading-relaxed">{terms(skills.proof_based.map(p => p.term))}</p>
         </div>
       )}
       {skills.trainable.length > 0 && (
@@ -760,7 +801,7 @@ function SkillGaps({ skills }: { skills: SkillsBreakdown | null }) {
             <span className="font-semibold text-amber-300">Trainable — you know something similar</span>
             <span className="font-semibold text-amber-300">{skills.trainable.length}</span>
           </div>
-          <p className="mt-0.5 text-[11px] text-slate-400 leading-relaxed">
+          <p className="mt-0.5 text-[11px] text-zinc-400 leading-relaxed">
             {skills.trainable.slice(0, 4).map(t => `${t.term} (knows ${t.similar_skill})`).join(' · ')}
             {skills.trainable.length > 4 ? ' · …' : ''}
           </p>
@@ -769,10 +810,10 @@ function SkillGaps({ skills }: { skills: SkillsBreakdown | null }) {
       {skills.not_covered.length > 0 && (
         <div>
           <div className="flex items-center justify-between text-[12px]">
-            <span className="text-slate-400">Not covered</span>
-            <span className="text-slate-400">{skills.not_covered.length}</span>
+            <span className="text-zinc-400">Not covered</span>
+            <span className="text-zinc-400">{skills.not_covered.length}</span>
           </div>
-          <p className="mt-0.5 text-[11px] text-slate-500 leading-relaxed">{terms(skills.not_covered)}</p>
+          <p className="mt-0.5 text-[11px] text-zinc-500 leading-relaxed">{terms(skills.not_covered)}</p>
         </div>
       )}
     </div>
@@ -788,8 +829,8 @@ function ChecksList({ checks }: { checks: EligibilityCheck[] }) {
           <span className={c.verdict === 'pass' ? 'text-emerald-400' : 'text-rose-400'}>
             {c.verdict === 'pass' ? '✓' : '✗'}
           </span>
-          <span className="text-slate-300">
-            <b className="text-slate-200 capitalize">{c.name.replace(/_/g, ' ')}:</b> {c.reason}
+          <span className="text-zinc-300">
+            <b className="text-zinc-200 capitalize">{c.name.replace(/_/g, ' ')}:</b> {c.reason}
           </span>
         </li>
       ))}
@@ -799,8 +840,8 @@ function ChecksList({ checks }: { checks: EligibilityCheck[] }) {
 
 function Busy({ label }: { label: string }) {
   return (
-    <div className="flex items-center gap-3 py-6 justify-center text-slate-300">
-      <span className="w-4 h-4 border-2 border-slate-600 border-t-white rounded-full animate-spin" />
+    <div className="flex items-center gap-3 py-6 justify-center text-zinc-300">
+      <span className="w-4 h-4 border-2 border-zinc-600 border-t-white rounded-full animate-spin" />
       {label}
     </div>
   )

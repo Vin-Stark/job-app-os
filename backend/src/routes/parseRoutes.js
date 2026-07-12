@@ -51,33 +51,22 @@ WHERE resume_id=$12 AND user_id=$13`,
                 ]
             );
 
-            // Seed resume_projects with any URLs Claude extracted from the resume
-            const projectsWithUrls = (parsedData.projects || []).filter(
-                p => p.github_url || p.live_url
-            );
-            for (const proj of projectsWithUrls) {
+            // Seed resume_projects for all extracted projects in one batch.
+            // The CASE WHEN preserves existing URLs when the new value is NULL.
+            const allProjects = parsedData.projects || [];
+            if (allProjects.length > 0) {
                 await pool.query(
                     `INSERT INTO resume_projects (user_id, resume_id, project_name, github_url, live_url)
-VALUES ($1, $2, $3, $4, $5)
+SELECT $1, $2, UNNEST($3::text[]), UNNEST($4::text[]), UNNEST($5::text[])
 ON CONFLICT (resume_id, project_name)
 DO UPDATE SET
   github_url = CASE WHEN EXCLUDED.github_url IS NOT NULL THEN EXCLUDED.github_url ELSE resume_projects.github_url END,
   live_url   = CASE WHEN EXCLUDED.live_url   IS NOT NULL THEN EXCLUDED.live_url   ELSE resume_projects.live_url   END,
   updated_at = NOW()`,
-                    [user_Id, resume_id, proj.name, proj.github_url || null, proj.live_url || null]
-                );
-            }
-
-            // Also seed rows (with NULL urls) for projects that had no URLs, so the gap panel knows they exist
-            const projectsWithoutUrls = (parsedData.projects || []).filter(
-                p => !p.github_url && !p.live_url
-            );
-            for (const proj of projectsWithoutUrls) {
-                await pool.query(
-                    `INSERT INTO resume_projects (user_id, resume_id, project_name)
-VALUES ($1, $2, $3)
-ON CONFLICT (resume_id, project_name) DO NOTHING`,
-                    [user_Id, resume_id, proj.name]
+                    [user_Id, resume_id,
+                     allProjects.map(p => p.name),
+                     allProjects.map(p => p.github_url || null),
+                     allProjects.map(p => p.live_url   || null)]
                 );
             }
 

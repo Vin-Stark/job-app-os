@@ -215,7 +215,7 @@ export function FitReport({ analysis, resumeId, generating, onGenerate }: Props)
           </p>
           <div className="flex items-stretch gap-3">
             <div className={`flex-1 rounded-lg border p-4 ${matchChipCls(match.match_score)}`}>
-              <p className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground font-medium mb-1" style={MONO}>
+              <p className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground font-medium mb-1" style={MONO}>
                 Job Match
               </p>
               <p className={`text-[28px] font-bold leading-none ${matchColor(match.match_score)}`} style={{ fontFamily: 'var(--font-stat)' }}>
@@ -226,7 +226,7 @@ export function FitReport({ analysis, resumeId, generating, onGenerate }: Props)
               </p>
             </div>
             <div className={`flex-1 rounded-lg border p-4 ${scoreChipCls(coverage.score)}`}>
-              <p className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground font-medium mb-1" style={MONO}>
+              <p className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground font-medium mb-1" style={MONO}>
                 Keyword Coverage (ATS)
               </p>
               <p className={`text-[28px] font-bold leading-none ${scoreColor(coverage.score)}`} style={{ fontFamily: 'var(--font-stat)' }}>
@@ -279,7 +279,7 @@ export function FitReport({ analysis, resumeId, generating, onGenerate }: Props)
                     </button>
                     <span className="text-[12px] text-foreground flex-1" style={MONO}>{inf.term}</span>
                     {inf.category === 'must_have' && (
-                      <span className="text-[8px] uppercase tracking-[0.1em] text-rose-400/80 font-medium" style={MONO}>
+                      <span className="text-[8px] uppercase tracking-[0.12em] text-rose-400/80 font-medium" style={MONO}>
                         must-have ×2
                       </span>
                     )}
@@ -542,11 +542,12 @@ export function FitReport({ analysis, resumeId, generating, onGenerate }: Props)
           <button
             onClick={handleGenerate}
             disabled={generating || saveLinks.isPending}
-            className="w-full flex items-center justify-center gap-2 h-10 bg-foreground text-background text-[13px] font-medium rounded-md hover:opacity-85 disabled:opacity-35 disabled:cursor-not-allowed transition-opacity"
+            className="w-full flex items-center justify-center gap-2 h-10 text-[13px] font-medium rounded-full hover:opacity-85 disabled:opacity-35 disabled:cursor-not-allowed transition-opacity"
+            style={{ background: 'var(--lime)', color: 'var(--lime-foreground)' }}
           >
             {generating || saveLinks.isPending ? (
               <>
-                <div className="w-3.5 h-3.5 border-2 border-background/25 border-t-background rounded-full animate-spin" />
+                <div className="w-3.5 h-3.5 border-2 border-black/20 border-t-black/70 rounded-full animate-spin" />
                 {saveLinks.isPending ? 'Saving…' : 'Tailoring your resume…'}
               </>
             ) : (

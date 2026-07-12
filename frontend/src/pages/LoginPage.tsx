@@ -2,6 +2,7 @@ import { useState, useRef, useLayoutEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Target, Eye, EyeOff } from 'lucide-react'
 import { setToken } from '@/lib/auth'
+import { api } from '@/api/client'
 
 const API = import.meta.env.VITE_API_BASE_URL as string
 type Tab = 'login' | 'register'
@@ -121,13 +122,7 @@ export function LoginPage() {
     e.preventDefault()
     setLoading(true); setError('')
     try {
-      const res = await fetch(`${API}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Login failed')
+      const data = await api.post<{ token: string }>('/api/auth/login', { email, password })
       setToken(data.token)
       navigate('/dashboard', { replace: true })
     } catch (err) {
@@ -141,13 +136,7 @@ export function LoginPage() {
     e.preventDefault()
     setLoading(true); setError('')
     try {
-      const res = await fetch(`${API}/api/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Registration failed')
+      await api.post('/api/auth/register', { name, email, password })
       setSuccess('Account created! Please log in.')
       setTimeout(() => switchTab('login'), 1200)
     } catch (err) {
@@ -210,22 +199,12 @@ export function LoginPage() {
               </button>
             </Field>
 
-            <div className="flex items-center justify-between pt-0.5">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" className="w-3.5 h-3.5" style={{ accentColor: '#C6FF34' }} />
-                <span className="text-[13px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Remember me</span>
-              </label>
-              <button type="button" className="text-[13px] transition-colors" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                Forgot password?
-              </button>
-            </div>
-
             {error && <p className="text-[12px] text-rose-400">{error}</p>}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full h-12 text-[14px] font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all mt-1 hover:brightness-110"
+              className="w-full h-12 text-[14px] font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all mt-1 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#C6FF34] focus-visible:ring-offset-black"
               style={{ background: '#C6FF34', color: '#171717' }}
             >
               {loading ? 'Logging in…' : 'Log in'}

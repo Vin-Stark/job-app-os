@@ -26,7 +26,9 @@ app.use(compression());
 // The extension's fetches come from chrome-extension://<pinned-id> (stable via
 // the "key" in manifest.json); requests with no Origin header (server-to-server,
 // curl) are allowed through so health checks and tests aren't blocked.
-const allowedOrigins = [process.env.FRONTEND_URL || 'http://localhost:5173'];
+// FRONTEND_URL may be comma-separated (e.g. local dev + deployed Vercel origin).
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
+  .split(',').map(o => o.trim()).filter(Boolean);
 if (process.env.EXTENSION_ORIGIN) allowedOrigins.push(process.env.EXTENSION_ORIGIN);
 app.use(cors({
   origin: (origin, cb) => {
