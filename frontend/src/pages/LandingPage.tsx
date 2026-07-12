@@ -85,6 +85,7 @@ export function LandingPage() {
   const glowRef = useRef<HTMLDivElement>(null)
   const featuresReveal = useReveal()
   const stepsReveal = useReveal()
+  const extensionReveal = useReveal()
   const ctaReveal = useReveal()
 
   const isLoggedIn = isTokenValid()
@@ -446,6 +447,154 @@ export function LandingPage() {
           {FEATURES.map((f, i) => (
             <FeatureCard key={f.label} index={i} {...f} visible={featuresReveal.visible} />
           ))}
+        </div>
+      </section>
+
+      {/* ── Divider ── */}
+      <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0 48px' }} />
+
+      {/* ── Chrome Extension ── */}
+      <section
+        ref={extensionReveal.ref}
+        style={{ padding: '80px 48px', maxWidth: 1200, margin: '0 auto' }}
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 80, alignItems: 'center' }}>
+
+          {/* Left: copy */}
+          <div style={{
+            opacity: extensionReveal.visible ? 1 : 0,
+            transform: extensionReveal.visible ? 'translateY(0)' : 'translateY(24px)',
+            transition: 'opacity 0.7s ease, transform 0.7s ease',
+          }}>
+            <p style={{
+              fontSize: 11, color: 'rgba(255,255,255,0.3)', fontFamily: 'var(--font-mono)',
+              letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 20,
+            }}>
+              Chrome Extension
+            </p>
+            <h2 style={{
+              fontSize: 'clamp(28px, 3.5vw, 44px)', fontWeight: 700,
+              letterSpacing: '-0.03em', lineHeight: 1.1, marginBottom: 24,
+            }}>
+              Capture & tailor<br />
+              <span style={{ color: '#C6FF34' }}>without leaving the tab.</span>
+            </h2>
+            <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.45)', lineHeight: 1.7, marginBottom: 36 }}>
+              Browse any job board. Open the extension. Your tailored resume downloads instantly — no copy-pasting, no tab switching.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              {[
+                { label: 'Works on any job board', body: 'LinkedIn, Greenhouse, Lever, Workday — if you can see the JD, tailr can read it.' },
+                { label: 'Visa gate first', body: 'Flags roles that require sponsorship you can\'t get before you spend a minute on them.' },
+                { label: 'Drag to upload', body: 'Tailored resume is ready to drag straight into the application field.' },
+              ].map(({ label, body }) => (
+                <div key={label} style={{ display: 'flex', gap: 14 }}>
+                  <div style={{
+                    width: 6, height: 6, borderRadius: '50%', background: '#C6FF34',
+                    flexShrink: 0, marginTop: 7,
+                  }} />
+                  <div>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{label} — </span>
+                    <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>{body}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right: extension popup mockup */}
+          <div style={{
+            opacity: extensionReveal.visible ? 1 : 0,
+            transform: extensionReveal.visible ? 'translateY(0)' : 'translateY(24px)',
+            transition: 'opacity 0.7s ease 120ms, transform 0.7s ease 120ms',
+            display: 'flex', justifyContent: 'center',
+          }}>
+            <div style={{
+              width: 300, borderRadius: 16, overflow: 'hidden',
+              border: '1px solid rgba(255,255,255,0.1)',
+              background: '#1c1c1c',
+              boxShadow: '0 40px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)',
+            }}>
+              {/* Popup header */}
+              <div style={{
+                padding: '14px 18px', borderBottom: '1px solid rgba(255,255,255,0.07)',
+                display: 'flex', alignItems: 'center', gap: 10,
+              }}>
+                <div style={{
+                  width: 24, height: 24, borderRadius: '50%', background: '#C6FF34',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }}>
+                  <Target size={10} color="#171717" strokeWidth={2.5} />
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 700 }}>tailr</span>
+                <div style={{ marginLeft: 'auto' }}>
+                  <div style={{
+                    fontSize: 9, padding: '2px 8px', borderRadius: 100,
+                    background: 'rgba(198,255,52,0.12)', color: '#C6FF34',
+                    fontFamily: 'var(--font-mono)', letterSpacing: '0.08em',
+                  }}>
+                    LIVE
+                  </div>
+                </div>
+              </div>
+
+              {/* Captured job */}
+              <div style={{ padding: '18px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{
+                  fontSize: 9, color: 'rgba(255,255,255,0.25)', fontFamily: 'var(--font-mono)',
+                  letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10,
+                }}>
+                  Captured from LinkedIn
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 3 }}>Software Engineer II</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>Stripe · San Francisco, CA</div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <span style={{
+                    fontSize: 10, padding: '3px 9px', borderRadius: 100,
+                    background: 'rgba(198,255,52,0.1)', color: '#C6FF34',
+                    fontFamily: 'var(--font-mono)',
+                  }}>87% match</span>
+                  <span style={{
+                    fontSize: 10, padding: '3px 9px', borderRadius: 100,
+                    background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)',
+                    fontFamily: 'var(--font-mono)',
+                  }}>Eligible ✓</span>
+                </div>
+              </div>
+
+              {/* ATS score bar */}
+              <div style={{ padding: '14px 18px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', marginBottom: 8,
+                  fontSize: 10, color: 'rgba(255,255,255,0.3)', fontFamily: 'var(--font-mono)',
+                  letterSpacing: '0.08em', textTransform: 'uppercase',
+                }}>
+                  <span>ATS score</span><span style={{ color: '#C6FF34' }}>72 / 100</span>
+                </div>
+                <div style={{ height: 3, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: '72%', background: '#C6FF34', borderRadius: 2 }} />
+                </div>
+              </div>
+
+              {/* CTA */}
+              <div style={{ padding: '16px 18px' }}>
+                <div style={{
+                  background: '#C6FF34', color: '#171717', borderRadius: 10,
+                  padding: '11px 16px', fontSize: 13, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                  cursor: 'default',
+                }}>
+                  ↓ Download tailored resume
+                </div>
+                <div style={{
+                  fontSize: 10, color: 'rgba(255,255,255,0.2)', textAlign: 'center',
+                  marginTop: 10, fontFamily: 'var(--font-mono)', letterSpacing: '0.06em',
+                }}>
+                  Drag directly into the application
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
