@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Target, ArrowRight, FileSearch, BarChart2, FileText, Layers } from 'lucide-react'
+import { Target, ArrowRight, FileSearch, BarChart2, FileText, Layers, Puzzle } from 'lucide-react'
 import { isTokenValid } from '@/lib/auth'
 
 // ── Scroll reveal hook ────────────────────────────────────────────────────────
@@ -87,6 +87,7 @@ export function LandingPage() {
   const stepsReveal = useReveal()
   const extensionReveal = useReveal()
   const ctaReveal = useReveal()
+  const [showExtPopover, setShowExtPopover] = useState(false)
 
   const isLoggedIn = isTokenValid()
 
@@ -499,6 +500,58 @@ export function LandingPage() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            <div style={{ position: 'relative', display: 'inline-block', marginTop: 36 }}>
+              <button
+                onClick={() => setShowExtPopover(p => !p)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  padding: '11px 24px', borderRadius: 999,
+                  border: '1px solid rgba(198,255,52,0.3)',
+                  color: '#C6FF34', background: showExtPopover ? 'rgba(198,255,52,0.07)' : 'transparent',
+                  fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                  transition: 'background 0.2s ease, border-color 0.2s ease',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(198,255,52,0.07)'
+                  e.currentTarget.style.borderColor = 'rgba(198,255,52,0.5)'
+                }}
+                onMouseLeave={e => {
+                  if (!showExtPopover) e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.borderColor = 'rgba(198,255,52,0.3)'
+                }}
+              >
+                <Puzzle size={15} strokeWidth={1.75} />
+                Get the extension
+              </button>
+
+              {showExtPopover && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 10px)', left: 0, zIndex: 10,
+                  width: 300, padding: '18px 20px', borderRadius: 14,
+                  background: '#1c1c1c', border: '1px solid rgba(255,255,255,0.1)',
+                  boxShadow: '0 24px 60px rgba(0,0,0,0.5)',
+                }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginBottom: 6 }}>
+                    Coming to the Chrome Web Store
+                  </p>
+                  <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', lineHeight: 1.6, marginBottom: 14 }}>
+                    The extension isn't published yet. You can install it manually from the repo in the meantime.
+                  </p>
+                  <a
+                    href="https://github.com/Vin-Stark/job-app-os/tree/main/extension"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      fontSize: 12, fontWeight: 600, color: '#C6FF34', textDecoration: 'none',
+                    }}
+                  >
+                    View on GitHub <ArrowRight size={12} />
+                  </a>
+                </div>
+              )}
             </div>
           </div>
 

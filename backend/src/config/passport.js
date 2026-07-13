@@ -5,7 +5,8 @@ const pool = require('./db');
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: process.env.GOOGLE_CALLBACK_URL
+    callbackURL: process.env.GOOGLE_CALLBACK_URL,
+    tokenURL: 'https://oauth2.googleapis.com/token'
     },async (accessToken //access the user's Google data
         , refreshToken, //to get a new accessToken when it expires
          profile, //the user's profile info from Google

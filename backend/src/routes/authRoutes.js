@@ -7,7 +7,9 @@ const passport = require('passport');
 const verifyToken = require('../middleware/authMiddleware');
 const { authLimiter } = require('../middleware/rateLimiters');
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+// FRONTEND_URL may be comma-separated (local dev has both origins). Take the
+// first value so OAuth redirects always point at a single valid URL.
+const FRONTEND_URL = (process.env.FRONTEND_URL || 'http://localhost:5173').split(',')[0].trim();
 
 router.post('/register', authLimiter, async (req, res) => {
     try {
@@ -124,24 +126,26 @@ router.patch('/work-auth', verifyToken, async (req, res) => {
 
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
-router.get('/google/callback',
-    passport.authenticate('google', { failureRedirect: `${FRONTEND_URL}/login`, session: false }),
-    (req, res) => {
+router.get('/google/callback', (req, res, next) => {
+    passport.authenticate('google', { session: false }, (err, user) => {
+        if (err) {
+            // Log every property so we can see Google's raw error_description + code
+            console.error('[google/callback] OAuth error:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
+            return res.redirect(`${FRONTEND_URL}/login?error=oauth_failed`);
+        }
+        if (!user) {
+            return res.redirect(`${FRONTEND_URL}/login?error=no_user`);
+        }
         const payload = {
-            user: {
-                id: req.user.id,
-                name: req.user.name,
-                email: req.user.email
-            }
+            user: { id: user.id, name: user.name, email: user.email }
         };
         const token = jwt.sign(payload, process.env.JWT_SECRET, {
             expiresIn: process.env.JWT_EXPIRES_IN || '7d'
         });
-        // Token travels in the URL FRAGMENT, not the query string —
-        // fragments never reach server logs, proxies, or the Referer header.
+        // Token travels in the URL FRAGMENT — never reaches server logs or Referer header.
         res.redirect(`${FRONTEND_URL}/auth/callback#token=${token}`);
-    }
-);
+    })(req, res, next);
+});
 
 
 

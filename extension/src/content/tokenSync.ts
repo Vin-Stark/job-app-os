@@ -5,6 +5,10 @@
 // Same-tab localStorage writes don't fire the 'storage' event, so we poll
 // briefly and push the token whenever it appears or changes.
 
+// Signal to the page that the extension is active so the web app can hide install prompts.
+document.documentElement.setAttribute('data-tailr-ext', 'true')
+document.dispatchEvent(new CustomEvent('tailr:installed'))
+
 const WEB_TOKEN_KEY = 'token'
 let lastSent: string | null = null
 

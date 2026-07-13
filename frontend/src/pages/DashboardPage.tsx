@@ -1,7 +1,21 @@
-import { ArrowRight, Briefcase, TrendingUp, Clock, CheckCircle, Zap, ChevronRight } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { ArrowRight, Briefcase, TrendingUp, Clock, CheckCircle, Zap, ChevronRight, Puzzle } from 'lucide-react'
 import { useApplications, type Application } from '@/hooks/useApplications'
 import { STATUS_CONFIG, ALL_STATUSES, type ApplicationStatus } from '@/lib/statusConfig'
 import { StatusBadge } from '@/components/StatusBadge'
+
+function useExtensionInstalled() {
+  const [installed, setInstalled] = useState(
+    () => document.documentElement.getAttribute('data-tailr-ext') === 'true'
+  )
+  useEffect(() => {
+    if (installed) return
+    const handler = () => setInstalled(true)
+    document.addEventListener('tailr:installed', handler)
+    return () => document.removeEventListener('tailr:installed', handler)
+  }, [installed])
+  return installed
+}
 
 // ── Company initial badge ─────────────────────────────────────────────────────
 function CompanyBadge({ name }: { name: string | null }) {
@@ -67,6 +81,7 @@ function computeStats(apps: Application[]) {
 // ── Main component ────────────────────────────────────────────────────────────
 export function DashboardPage({ onNavigate }: { onNavigate: (view: string) => void }) {
   const { data: apps, isLoading, error } = useApplications()
+  const extensionInstalled = useExtensionInstalled()
 
   if (isLoading) return <DashboardSkeleton />
 
@@ -77,7 +92,6 @@ export function DashboardPage({ onNavigate }: { onNavigate: (view: string) => vo
       </div>
     )
   }
-
   const list = apps ?? []
   const { total, counts, responseRate, activeInterviews } = computeStats(list)
   const recent = list.slice(0, 6)
@@ -258,6 +272,32 @@ export function DashboardPage({ onNavigate }: { onNavigate: (view: string) => vo
           <ChevronRight size={13} style={{ color: 'rgba(23,23,23,0.6)' }} />
         </div>
       </div>
+
+      {!extensionInstalled && (
+        <div className="rounded-lg border border-border px-6 py-5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Puzzle size={15} strokeWidth={1.75} className="text-muted-foreground flex-shrink-0" />
+            <div>
+              <div className="text-[13px] font-semibold text-foreground"
+                style={{ fontFamily: 'var(--font-display)' }}>
+                Get the tailr extension
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Capture job postings and drag tailored resumes straight into applications.
+              </p>
+            </div>
+          </div>
+          <a
+            href="https://github.com/Vin-Stark/job-app-os/tree/main/extension"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-shrink-0 text-[12px] font-medium px-4 py-2 rounded-md border border-border
+                       text-foreground hover:bg-muted transition-colors"
+          >
+            Install →
+          </a>
+        </div>
+      )}
     </div>
   )
 }
